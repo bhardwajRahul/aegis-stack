@@ -12,7 +12,7 @@ import pytest
 from aegis.core.components import COMPONENTS, CORE_COMPONENTS
 from aegis.core.copier_manager import load_copier_answers
 
-from .test_utils import run_aegis_command
+from .test_utils import format_file_like_regen, run_aegis_command
 
 if TYPE_CHECKING:
     from tests.cli.conftest import ProjectFactory
@@ -603,3 +603,80 @@ class TestRemoveCommandVersionCompatibility:
 
         # Should succeed
         assert result.success, f"Command failed: {result.stderr}"
+
+
+class TestRemoveHtmxComponent:
+    """``aegis remove htmx`` must undo everything ``aegis add htmx`` did.
+
+    These consume the ``base_htmx`` cache entry: the htmx frontend spans a
+    component tree, shared-file gates and node build files, so removal is the
+    place where a half-registered file shows up as a project that still
+    imports something that is no longer there.
+    """
+
+    @pytest.mark.slow
+    def test_remove_htmx_strips_the_whole_frontend(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        project_path = project_factory("base_htmx")
+        assert (project_path / "app" / "components" / "web_frontend").is_dir()
+
+        result = run_aegis_command(
+            "remove", "htmx", "--project-path", str(project_path), "--yes"
+        )
+        assert result.success, f"Command failed: {result.stderr}"
+
+        # The component's own tree and its node build files.
+        assert not (project_path / "app" / "components" / "web_frontend").exists()
+        assert not (project_path / "package.json").exists()
+        assert not (project_path / "tailwind.config.js").exists()
+        assert load_copier_answers(project_path).get("include_htmx") is False
+
+    @pytest.mark.slow
+    def test_remove_htmx_regenerates_the_shared_gates(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """The mount lives in a shared file, so removal has to regenerate it.
+
+        Leaving it behind is the failure that matters: the tree is gone but
+        main.py still imports from it, so the app dies at startup rather than
+        quietly losing a page.
+        """
+        project_path = project_factory("base_htmx")
+        main_py = project_path / "app" / "integrations" / "main.py"
+        assert "web_frontend" in main_py.read_text()
+
+        result = run_aegis_command(
+            "remove", "htmx", "--project-path", str(project_path), "--yes"
+        )
+        assert result.success, f"Command failed: {result.stderr}"
+
+        assert "web_frontend" not in main_py.read_text()
+        assert "jinja2" not in (project_path / "pyproject.toml").read_text().lower()
+
+    @pytest.mark.slow
+    def test_remove_htmx_leaves_the_flet_frontend_alone(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Flet is CORE. Removing the optional frontend must not touch it.
+
+        ``before`` is normalized through the same ruff helper the regen path
+        uses, so the byte-identity assertion doesn't depend on init's
+        non-critical `make fix` step having succeeded (it can silently fail
+        under load, leaving the fixture project unformatted).
+        """
+        project_path = project_factory("base_htmx")
+        flet_main = project_path / "app" / "components" / "frontend" / "main.py"
+        format_file_like_regen(flet_main, project_path)
+        before = flet_main.read_text()
+
+        result = run_aegis_command(
+            "remove", "htmx", "--project-path", str(project_path), "--yes"
+        )
+        assert result.success, f"Command failed: {result.stderr}"
+
+        assert flet_main.read_text() == before
+        assert (
+            'app.mount("/dashboard"'
+            in (project_path / "app" / "integrations" / "main.py").read_text()
+        )

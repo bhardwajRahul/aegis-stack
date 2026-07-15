@@ -29,7 +29,7 @@ from .component_utils import (
     extract_base_service_name,
     extract_engine_info,
 )
-from .components import COMPONENTS, CORE_COMPONENTS
+from .components import COMPONENTS, CORE_COMPONENTS, ComponentType
 from .insights_service_parser import (
     is_insights_service_with_options,
     parse_insights_service_config,
@@ -181,6 +181,30 @@ class TemplateGenerator:
             if base_name in COMPONENTS:
                 self.component_specs[base_name] = COMPONENTS[base_name]
 
+    def _component_flag(self, name: str) -> str:
+        """Cookiecutter "yes"/"no" for whether component ``name`` is selected.
+
+        Base-name comparison so bracket syntax (``worker[dramatiq]``,
+        ``scheduler[sqlite]``) still counts as the component.
+        """
+        return (
+            "yes"
+            if any(extract_base_component_name(c) == name for c in self.components)
+            else "no"
+        )
+
+    def _service_flag(self, name: str) -> str:
+        """Cookiecutter "yes"/"no" for whether service ``name`` is selected.
+
+        Base-name comparison so bracket syntax (``ai[langchain, sqlite]``,
+        ``auth[rbac]``) still counts as the service.
+        """
+        return (
+            "yes"
+            if any(extract_base_service_name(s) == name for s in self.selected_services)
+            else "no"
+        )
+
     def get_template_context(self) -> dict[str, Any]:
         """
         Generate cookiecutter context from components.
@@ -191,34 +215,24 @@ class TemplateGenerator:
         # Store the originally selected components (without core)
         selected_only = [c for c in self.components if c not in CORE_COMPONENTS]
 
-        # Check for components using base names
-        has_database = any(
-            extract_base_component_name(c) == ComponentNames.DATABASE
-            for c in self.components
-        )
-
         return {
             "project_name": self.project_name,
             "project_slug": self.project_slug,
             "python_version": self.python_version,
             "aegis_version": aegis_version,
-            # Component flags for template conditionals - cookiecutter needs yes/no
-            AnswerKeys.REDIS: "yes"
-            if ComponentNames.REDIS in self.components
-            else "no",
-            AnswerKeys.WORKER: "yes"
-            if any(c.startswith(ComponentNames.WORKER) for c in self.components)
-            else "no",
-            AnswerKeys.SCHEDULER: "yes"
-            if any(c.startswith(ComponentNames.SCHEDULER) for c in self.components)
-            else "no",
-            AnswerKeys.DATABASE: "yes" if has_database else "no",
-            AnswerKeys.INGRESS: "yes"
-            if ComponentNames.INGRESS in self.components
-            else "no",
-            AnswerKeys.OBSERVABILITY: "yes"
-            if ComponentNames.OBSERVABILITY in self.components
-            else "no",
+            # include_<name> flags for template conditionals, one per optional
+            # component and per service, derived from the plugin registries —
+            # a new spec needs no entry here. Cookiecutter-era consumers
+            # expect "yes"/"no" strings.
+            **{
+                AnswerKeys.include_key(name): self._component_flag(name)
+                for name, spec in COMPONENTS.items()
+                if spec.type != ComponentType.CORE
+            },
+            **{
+                AnswerKeys.include_key(name): self._service_flag(name)
+                for name in SERVICES
+            },
             # Database engine selection (sqlite or postgres)
             "database_engine": self.database_engine or StorageBackends.SQLITE,
             # Postgres provider (container vs neon); ignored for sqlite engines
@@ -238,14 +252,6 @@ class TemplateGenerator:
                 for c in self.components
             ),
             "needs_redis": ComponentNames.REDIS in self.components,
-            # Service flags for template conditionals
-            # Use base name extraction to handle bracket syntax (e.g., ai[langchain, sqlite])
-            AnswerKeys.AUTH: "yes"
-            if any(
-                extract_base_service_name(s) == AnswerKeys.SERVICE_AUTH
-                for s in self.selected_services
-            )
-            else "no",
             # Auth level selection (basic, rbac, or org)
             AnswerKeys.AUTH_LEVEL: (auth_level := self._get_auth_level()),
             # Derived auth level flags for template conditionals
@@ -259,42 +265,6 @@ class TemplateGenerator:
             # with ``auth[rbac,oauth]`` etc.). Defaults off so existing
             # flows aren't surprised by extra routes and dependencies.
             AnswerKeys.AUTH_OAUTH: "yes" if self.include_oauth else "no",
-            AnswerKeys.AI: "yes"
-            if any(
-                extract_base_service_name(s) == AnswerKeys.SERVICE_AI
-                for s in self.selected_services
-            )
-            else "no",
-            AnswerKeys.COMMS: "yes"
-            if any(
-                extract_base_service_name(s) == AnswerKeys.SERVICE_COMMS
-                for s in self.selected_services
-            )
-            else "no",
-            AnswerKeys.INSIGHTS: "yes"
-            if any(
-                extract_base_service_name(s) == AnswerKeys.SERVICE_INSIGHTS
-                for s in self.selected_services
-            )
-            else "no",
-            AnswerKeys.PAYMENT: "yes"
-            if any(
-                extract_base_service_name(s) == AnswerKeys.SERVICE_PAYMENT
-                for s in self.selected_services
-            )
-            else "no",
-            AnswerKeys.BLOG: "yes"
-            if any(
-                extract_base_service_name(s) == AnswerKeys.SERVICE_BLOG
-                for s in self.selected_services
-            )
-            else "no",
-            AnswerKeys.FINANCE: "yes"
-            if any(
-                extract_base_service_name(s) == AnswerKeys.SERVICE_FINANCE
-                for s in self.selected_services
-            )
-            else "no",
             AnswerKeys.PAYMENT_PROVIDER: PaymentProviders.DEFAULT,
             # Insights source flags
             AnswerKeys.INSIGHTS_GITHUB: "yes"

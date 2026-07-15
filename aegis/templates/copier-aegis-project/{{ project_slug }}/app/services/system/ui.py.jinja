@@ -47,6 +47,9 @@ def get_component_title(component_name: str) -> str:
     mapping = {
         "backend": "Server",
         "frontend": "Frontend",
+        {%- if include_htmx %}
+        "web_frontend": "Web Frontend",
+        {%- endif %}
         {%- if include_database %}
         "database": "Database",
         {%- endif %}
@@ -95,7 +98,13 @@ def get_component_label(component_name: str) -> str:
     """Map component keys to user-facing labels (brand or friendly name)."""
     mapping = {
         "backend": "FastAPI + Flet",
+        {%- if include_htmx %}
+        # Both frontends ship: Flet at /dashboard, htmx pages at /.
+        "frontend": "Flet + htmx",
+        "web_frontend": "Jinja2 + htmx",
+        {%- else %}
         "frontend": "Flet",
+        {%- endif %}
         {%- if include_database %}
         "database": "PostgreSQL",
         {%- endif %}

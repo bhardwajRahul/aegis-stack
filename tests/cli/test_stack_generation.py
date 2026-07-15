@@ -290,6 +290,50 @@ STACK_COMBINATIONS = [
         expected_docker_services=["webserver"],
         expected_pyproject_deps=["fastapi", "flet"],
     ),
+    # htmx rows. Every one asserts BOTH frontends and BOTH of their deps: the
+    # htmx frontend is additive, so a stack that ships it and loses the Flet
+    # dashboard is the failure these rows exist to catch.
+    StackCombination(
+        name="base_htmx",
+        components=["htmx"],
+        description="htmx web frontend alongside the core Flet dashboard",
+        expected_files=[
+            "app/components/web_frontend/main.py",
+            "app/components/web_frontend/templates/pages/landing.html",
+            "app/components/frontend/main.py",
+            "package.json",
+            "tailwind.config.js",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "jinja2"],
+    ),
+    StackCombination(
+        name="htmx_auth",
+        components=["htmx", "database"],
+        services=["auth"],
+        description="htmx web frontend with the auth service (auth pages)",
+        expected_files=[
+            "app/components/web_frontend/templates/pages/auth/login.html",
+            "app/components/web_frontend/static/js/auth.js",
+            "app/components/frontend/main.py",
+            "app/services/auth/",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "jinja2", "sqlmodel"],
+    ),
+    StackCombination(
+        name="htmx_with_components",
+        components=["htmx", "database", "worker", "redis"],
+        description="htmx web frontend beside background processing infra",
+        expected_files=[
+            "app/components/web_frontend/main.py",
+            "app/components/frontend/main.py",
+            "app/components/worker/",
+            "app/core/db.py",
+        ],
+        expected_docker_services=["webserver", "redis", "worker-system"],
+        expected_pyproject_deps=["fastapi", "flet", "jinja2", "redis"],
+    ),
     StackCombination(
         name="everything",
         components=["database", "scheduler", "worker", "redis"],
@@ -439,6 +483,12 @@ def test_stack_combinations_comprehensive() -> None:
         "blog",
         "finance",
         "comms",
+        # The two htmx slices worth localizing: the frontend on its own, and
+        # the frontend with auth (which is what pulls in the auth pages and
+        # the auth JS). ``everything`` covers both transitively, but a focused
+        # row says which half broke.
+        "base_htmx",
+        "htmx_auth",
         "everything",
     }
     missing = must_have - combination_names

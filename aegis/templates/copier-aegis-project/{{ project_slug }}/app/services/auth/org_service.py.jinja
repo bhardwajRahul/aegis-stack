@@ -9,7 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.models.org import OrgCreate, Organization, OrganizationMember, OrgInvite
 
 
-class RestoreConflict(Exception):
+class RestoreConflictError(Exception):
     """Raised by ``restore_org`` when the soft-deleted org's slug is
     already held by another live org. The partial unique index
     ``ix_organization_slug`` would reject the commit otherwise. The
@@ -125,7 +125,7 @@ class OrgService:
 
         Does not restore the org's old memberships — those were
         hard-deleted on soft-delete. Returns ``None`` if the row doesn't
-        exist or is already live. Raises ``RestoreConflict`` if another
+        exist or is already live. Raises ``RestoreConflictError`` if another
         live org has claimed the slug since the soft delete (partial
         unique index ``ix_organization_slug`` would reject the commit
         otherwise).
@@ -143,7 +143,7 @@ class OrgService:
         )
         conflict = (await self.db.exec(conflict_stmt)).first()
         if conflict is not None:
-            raise RestoreConflict(
+            raise RestoreConflictError(
                 f"Slug '{org.slug}' is already in use by an active organization"
             )
 

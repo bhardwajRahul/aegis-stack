@@ -62,16 +62,25 @@ aegis components
 
 **Example Output:**
 ```
-AVAILABLE COMPONENTS
+CORE COMPONENTS
 ========================================
+  backend      - FastAPI backend server (always included)
+  frontend     - Flet frontend interface (always included)
 
-Infrastructure Components
-----------------------------------------
-  scheduler     - APScheduler-based async task scheduling
-  worker        - Background task processing (arq, Dramatiq, or TaskIQ) (requires: redis)
-  database      - SQLite or PostgreSQL with SQLModel ORM
-  redis         - Redis cache and message broker
+INFRASTRUCTURE COMPONENTS
+========================================
+  worker       - Background task processing (arq, Dramatiq, or TaskIQ)
+               Requires: redis
+  scheduler    - Scheduled task execution infrastructure
+  database     - Database with SQLModel ORM (SQLite or PostgreSQL)
+  redis        - Redis cache and message broker
+  ingress      - Traefik reverse proxy and load balancer
+               Recommends: backend
   observability - Logfire observability, tracing, and metrics
+
+FRONTEND COMPONENTS
+========================================
+  htmx         - Server-rendered htmx web frontend
 ```
 
 ### aegis services
@@ -239,6 +248,9 @@ aegis add "scheduler[sqlite]"
 
 # Add worker (auto-includes redis)
 aegis add worker
+
+# Add the htmx web frontend (server-rendered pages at /)
+aegis add htmx
 
 # Add multiple components
 aegis add database,scheduler
@@ -859,6 +871,7 @@ my-project/
 │   ├── components/
 │   │   ├── backend/        # FastAPI backend
 │   │   ├── frontend/       # Flet frontend
+│   │   ├── web_frontend/   # htmx web frontend (if included)
 │   │   ├── scheduler.py    # APScheduler (if included)
 │   │   ├── worker/         # Worker queues (if included)
 │   │   └── database.py     # Database setup (if included)

@@ -49,17 +49,16 @@ def test_infrastructure_order_matches_registry() -> None:
     """``INFRASTRUCTURE_ORDER`` must stay in sync with the component registry.
 
     The interactive prompts iterate ``ComponentNames.INFRASTRUCTURE_ORDER``; an
-    infrastructure component added to ``COMPONENTS`` but forgotten here would
-    silently never be offered. The registry dict order is the intended display
-    order, so require an exact match.
+    optional component (any non-CORE type: infrastructure or frontend) added
+    to ``COMPONENTS`` but forgotten here would silently never be offered. The
+    registry dict order is the intended display order, so require an exact
+    match.
     """
     from aegis.constants import ComponentNames
     from aegis.core.components import COMPONENTS, ComponentType
 
     derived = [
-        name
-        for name, spec in COMPONENTS.items()
-        if spec.type == ComponentType.INFRASTRUCTURE
+        name for name, spec in COMPONENTS.items() if spec.type != ComponentType.CORE
     ]
     assert derived == ComponentNames.INFRASTRUCTURE_ORDER, (
         "ComponentNames.INFRASTRUCTURE_ORDER drifted from the COMPONENTS "

@@ -1,0 +1,238 @@
+"""Full-page routes for the web frontend.
+
+One handler per page: build the context, hand it to a template. Anything a
+page swaps in without a reload belongs in ``routes/partials/`` instead.
+"""
+{%- if include_auth %}
+
+from typing import Annotated
+from urllib.parse import quote
+
+from app.components.backend.api.auth.router import login as api_login
+from app.components.backend.api.auth.router import register as api_register
+from app.components.backend.api.deps import login_rate_limit, register_rate_limit
+from app.components.web_frontend.main import templates
+from app.core.audit import AuditEmitter, get_audit
+from app.core.security import REFRESH_COOKIE_NAME, clear_session_cookie
+from app.models.user import User, UserCreate
+from app.services.auth.deps import (
+    get_optional_user,
+    get_refresh_service,
+    get_user_service,
+)
+{%- if include_auth_org %}
+from app.services.auth.deps import get_invite_service
+from app.services.auth.invite_service import InviteService
+{%- endif %}
+from app.services.auth.refresh_service import RefreshService
+from app.services.auth.user_service import UserService
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.security import OAuth2PasswordRequestForm
+{%- else %}
+
+from app.components.web_frontend.main import templates
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
+{%- endif %}
+
+router = APIRouter()
+
+
+@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def landing(request: Request) -> HTMLResponse:
+    """Landing page."""
+    return templates.TemplateResponse(request=request, name="pages/landing.html")
+{%- if include_auth %}
+
+
+def _safe_next(target: str | None) -> str:
+    """Return ``target`` only if it is a local path, else ``/``.
+
+    ``?next=`` arrives from the URL, so it is attacker-controlled. Anything
+    not starting with a single ``/`` is discarded — which also rules out
+    ``//evil.example`` protocol-relative URLs — otherwise sign-in becomes an
+    open redirect.
+    """
+    if not target or not target.startswith("/") or target.startswith("//"):
+        return "/"
+    return target
+
+
+def _current_user_or_redirect(
+    request: Request,
+    user: User | None,
+) -> RedirectResponse | None:
+    """Bounce anonymous visitors to ``/login?next=<here>``, else ``None``.
+
+    Page-level protection is opt-in, exactly like the API's. A page that
+    needs a signed-in user takes ``user: User | None = Depends(get_optional_user)``
+    and returns this result when it is not None::
+
+        bounce = _current_user_or_redirect(request, user)
+        if bounce:
+            return bounce
+
+    There is deliberately no default-deny middleware: a page without this
+    call is public, the same contract ``Depends(get_current_active_user)``
+    gives the API.
+    """
+    if user is not None:
+        return None
+    return RedirectResponse(
+        url=f"/login?next={quote(request.url.path)}", status_code=303
+    )
+
+
+@router.get("/login", response_class=HTMLResponse, include_in_schema=False)
+async def login_page(request: Request, next: str = "") -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="pages/auth/login.html",
+        context={"next": _safe_next(next) if next else ""},
+    )
+
+
+@router.post("/login", include_in_schema=False)
+async def login_submit(
+    request: Request,
+    email: Annotated[str, Form()],
+    password: Annotated[str, Form()],
+    next: Annotated[str, Form()] = "",
+    user_service: UserService = Depends(get_user_service),
+    refresh_service: RefreshService = Depends(get_refresh_service),
+    audit: AuditEmitter = Depends(get_audit),
+    _rate_limit: None = Depends(login_rate_limit),
+) -> RedirectResponse:
+    """Sign in from the page form.
+
+    Delegates to the API's own login handler rather than reimplementing it:
+    account lockout, failed-attempt tracking, audit events, token minting and
+    cookie scoping all live there, and a second copy here would drift out of
+    step with them. The rate limiter is re-declared above so this path is
+    limited by the same bucket as the API.
+
+    The redirect is handed in as the ``response``, so the session and refresh
+    cookies the API handler sets land on the 303 the browser follows.
+    """
+    redirect = RedirectResponse(url=_safe_next(next), status_code=303)
+    try:
+        await api_login(
+            request=request,
+            response=redirect,
+            form_data=OAuth2PasswordRequestForm(username=email, password=password),
+            user_service=user_service,
+            refresh_service=refresh_service,
+            audit=audit,
+            _rate_limit=None,
+        )
+    except HTTPException:
+        # The API answers wrong-password and locked-account with the same 401
+        # so neither reveals whether the email exists. Keep that property:
+        # one message, one destination.
+        return RedirectResponse(url="/login?error=invalid", status_code=303)
+    return redirect
+
+
+@router.get("/register", response_class=HTMLResponse, include_in_schema=False)
+async def register_page(request: Request, next: str = "") -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="pages/auth/register.html",
+        context={"next": _safe_next(next) if next else ""},
+    )
+
+
+@router.post("/register", include_in_schema=False)
+async def register_submit(
+    request: Request,
+    email: Annotated[str, Form()],
+    password: Annotated[str, Form()],
+    full_name: Annotated[str, Form()] = "",
+    next: Annotated[str, Form()] = "",
+    user_service: UserService = Depends(get_user_service),
+    refresh_service: RefreshService = Depends(get_refresh_service),
+{%- if include_auth_org %}
+    invite_service: InviteService = Depends(get_invite_service),
+{%- endif %}
+    audit: AuditEmitter = Depends(get_audit),
+    _rate_limit: None = Depends(register_rate_limit),
+) -> RedirectResponse:
+    """Create an account from the page form.
+
+    Same delegation as ``login_submit``: the API handler owns the closed-
+    signup check, duplicate detection, the verification email and the
+    cookies. Every dependency the API handler declares must be threaded
+    through here — an omitted one stays a bare ``Depends`` sentinel and
+    blows up the moment the handler body touches it.
+    """
+    redirect = RedirectResponse(url="/verify-pending", status_code=303)
+    try:
+        await api_register(
+            request=request,
+            response=redirect,
+            user_data=UserCreate(
+                email=email, password=password, full_name=full_name or None
+            ),
+            user_service=user_service,
+            refresh_service=refresh_service,
+{%- if include_auth_org %}
+            invite_service=invite_service,
+{%- endif %}
+            audit=audit,
+            _rate_limit=None,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return RedirectResponse(url="/register?error=closed", status_code=303)
+        if exc.status_code == 400:
+            return RedirectResponse(url="/register?error=exists", status_code=303)
+        return RedirectResponse(url="/register?error=invalid", status_code=303)
+    return redirect
+
+
+@router.get("/logout", include_in_schema=False)
+async def logout() -> RedirectResponse:
+    """Sign out and land back on the public landing page.
+
+    A GET so a plain link works. Both cookies are dropped: leaving the
+    refresh cookie would let the next page load silently resume the session.
+    """
+    redirect = RedirectResponse(url="/", status_code=303)
+    clear_session_cookie(redirect)
+    redirect.delete_cookie(REFRESH_COOKIE_NAME, path="/api/v1/auth")
+    return redirect
+
+
+@router.get("/forgot-password", response_class=HTMLResponse, include_in_schema=False)
+async def forgot_password_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request, name="pages/auth/forgot_password.html"
+    )
+
+
+@router.get("/reset-password", response_class=HTMLResponse, include_in_schema=False)
+async def reset_password_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request, name="pages/auth/reset_password.html"
+    )
+
+
+@router.get("/verify-email", response_class=HTMLResponse, include_in_schema=False)
+async def verify_email_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request, name="pages/auth/verify_email.html"
+    )
+
+
+@router.get("/verify-pending", response_class=HTMLResponse, include_in_schema=False)
+async def verify_pending_page(
+    request: Request,
+    user: User | None = Depends(get_optional_user),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="pages/auth/verify_pending.html",
+        context={"user": user},
+    )
+{%- endif %}

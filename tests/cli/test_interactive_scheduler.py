@@ -37,6 +37,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # redis
                 False,  # ingress
                 False,  # observability
+                False,  # htmx
                 False,  # auth
                 False,  # payment
                 False,  # AI
@@ -55,7 +56,7 @@ class TestInteractiveSchedulerFlow:
             assert services == []  # No services selected
 
             # Verify correct calls were made (including blog service prompt)
-            assert mock_confirm.call_count == 13
+            assert mock_confirm.call_count == 14
         finally:
             clear_database_engine_selection()
 
@@ -78,6 +79,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # redis
                 False,  # ingress
                 False,  # observability
+                False,  # htmx
                 False,  # auth
                 False,  # payment
                 False,  # AI
@@ -112,6 +114,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # redis
                 False,  # ingress=no
                 False,  # observability=no
+                False,  # htmx
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -142,6 +145,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # redis
                 False,  # ingress
                 False,  # observability
+                False,  # htmx
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -178,6 +182,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # redis
                 False,  # ingress
                 False,  # observability
+                False,  # htmx
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -194,8 +199,9 @@ class TestInteractiveSchedulerFlow:
             assert any(c.startswith("database") for c in components)
             assert scheduler_backend == "sqlite"
 
-            # Should not have been prompted for generic database (12 confirms total, including blog)
-            assert mock_confirm.call_count == 13
+            # Should not have been prompted for generic database (14 confirms
+            # total: database auto-skipped, htmx and every service asked)
+            assert mock_confirm.call_count == 14
         finally:
             clear_database_engine_selection()
 
@@ -220,6 +226,7 @@ class TestInteractiveSchedulerFlow:
                 True,  # persistence=yes
                 False,  # ingress=no
                 False,  # observability=no
+                False,  # htmx
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -256,6 +263,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # redis
                 False,  # ingress
                 False,  # observability
+                False,  # htmx
                 False,  # no auth
                 False,  # payment
                 False,  # no AI

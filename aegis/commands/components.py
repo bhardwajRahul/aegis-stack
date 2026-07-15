@@ -27,20 +27,22 @@ def components_command() -> None:
         elif component == ComponentNames.FRONTEND:
             typer.echo(t("components.frontend_desc"))
 
-    typer.echo(f"\n{t('components.infra_title')}")
-    typer.echo("=" * 40)
+    def _print_section(title_key: str, component_type: ComponentType) -> None:
+        typer.echo(f"\n{t(title_key)}")
+        typer.echo("=" * 40)
+        for name, spec in get_components_by_type(component_type).items():
+            desc = _translated_desc(name, spec.description)
+            typer.echo(f"  {name:12} - {desc}")
+            if spec.requires:
+                typer.echo(
+                    f"               {t('components.requires', deps=', '.join(spec.requires))}"
+                )
+            if spec.recommends:
+                typer.echo(
+                    f"               {t('components.recommends', deps=', '.join(spec.recommends))}"
+                )
 
-    infra_components = get_components_by_type(ComponentType.INFRASTRUCTURE)
-    for name, spec in infra_components.items():
-        desc = _translated_desc(name, spec.description)
-        typer.echo(f"  {name:12} - {desc}")
-        if spec.requires:
-            typer.echo(
-                f"               {t('components.requires', deps=', '.join(spec.requires))}"
-            )
-        if spec.recommends:
-            typer.echo(
-                f"               {t('components.recommends', deps=', '.join(spec.recommends))}"
-            )
+    _print_section("components.infra_title", ComponentType.INFRASTRUCTURE)
+    _print_section("components.frontend_title", ComponentType.FRONTEND)
 
     typer.echo(f"\n{t('components.usage_hint')}")

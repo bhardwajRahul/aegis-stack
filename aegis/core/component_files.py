@@ -292,6 +292,30 @@ def get_component_files(
     return sorted(set(_expand_directories_to_files(base)))
 
 
+def get_component_cleanup_paths(component: str) -> list[str]:
+    """Return the removal footprint with directories left as directories.
+
+    Same paths as ``get_component_files(component, full=True)`` — primary plus
+    every gated extra — but *unexpanded*. That difference matters: expanding a
+    directory yields only the files the template ships, so anything the project
+    grew afterwards (``__pycache__``, build output such as ``static/dist/``)
+    survives and keeps the directory alive. Removal wants the whole tree gone,
+    which is what generation's own cleanup does.
+
+    Args:
+        component: Component or service name.
+
+    Returns:
+        Project-relative paths, each a file or a directory.
+    """
+    from .post_gen_tasks import get_component_file_mapping
+
+    paths = list(get_component_file_mapping().get(component, []))
+    for extra_files in _spec_extras(component).values():
+        paths.extend(extra_files)
+    return sorted(set(paths))
+
+
 def get_service_files(service: str) -> list[str]:
     """
     Get list of file paths that belong to a service.

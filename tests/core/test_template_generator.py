@@ -291,6 +291,51 @@ class TestCopierAnswersTemplate:
             )
 
 
+class TestHtmxFrontendQuestion:
+    """Test the include_htmx component question in copier.yml.
+
+    The Flet frontend is a core component and always present. The htmx web
+    frontend is additive, so it is a bool include flag like the other
+    components, not a variant axis. It must have no `when` clause and must
+    appear in .copier-answers.yml.jinja so `aegis update` preserves the
+    choice and backfills it for pre-existing projects.
+    """
+
+    REPO_ROOT = Path(__file__).parent.parent.parent
+
+    def test_copier_yml_has_include_htmx_question(self) -> None:
+        """copier.yml must define include_htmx as a bool, off by default."""
+        import yaml
+
+        with open(self.REPO_ROOT / "copier.yml") as f:
+            config = yaml.safe_load(f)
+
+        assert AnswerKeys.HTMX in config
+        question = config[AnswerKeys.HTMX]
+        assert question["type"] == "bool"
+        assert question["default"] is False
+        assert "when" not in question
+
+    def test_copier_answers_template_includes_htmx_flag(self) -> None:
+        """include_htmx must persist in .copier-answers.yml.jinja.
+
+        Without this, the choice is lost on `aegis update` and sync-render
+        reconciliation cannot backfill it for pre-existing projects.
+        """
+        template_path = (
+            self.REPO_ROOT
+            / "aegis"
+            / "templates"
+            / "copier-aegis-project"
+            / "{{ project_slug }}"
+            / ".copier-answers.yml.jinja"
+        )
+
+        template_content = template_path.read_text()
+        expected = f"{AnswerKeys.HTMX}: {{{{ {AnswerKeys.HTMX} }}}}"
+        assert expected in template_content
+
+
 class TestTemplateGeneratorVoice:
     """Test AI voice configuration in template context.
 

@@ -261,17 +261,54 @@ class TestFormatCode:
 
     def test_make_not_found(self, tmp_path: Path) -> None:
         """Test when make command is not found."""
-        with patch("subprocess.run", side_effect=FileNotFoundError()):
+        with (
+            patch("subprocess.run", side_effect=FileNotFoundError()),
+            patch("aegis.core.template_cleanup.time.sleep"),
+        ):
             result = format_code(tmp_path)
 
             assert result is False
 
     def test_formatting_timeout(self, tmp_path: Path) -> None:
         """Test formatting timeout."""
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("make", 60)):
+        with (
+            patch("subprocess.run", side_effect=subprocess.TimeoutExpired("make", 60)),
+            patch("aegis.core.template_cleanup.time.sleep"),
+        ):
             result = format_code(tmp_path)
 
             assert result is False
+
+    def test_transient_spawn_failure_is_retried(self, tmp_path: Path) -> None:
+        """A fork failure under load (EAGAIN) must be retried, not silently
+        skipped: an unformatted project breaks the add-path byte-identity
+        contract that regenerated shared files match init output."""
+        with (
+            patch(
+                "subprocess.run",
+                side_effect=[OSError("fork: EAGAIN"), Mock(returncode=0, stderr="")],
+            ),
+            patch("aegis.core.template_cleanup.time.sleep"),
+        ):
+            result = format_code(tmp_path)
+
+            assert result is True
+
+    def test_transient_timeout_is_retried(self, tmp_path: Path) -> None:
+        """A timeout from a briefly starved machine is retried the same way."""
+        with (
+            patch(
+                "subprocess.run",
+                side_effect=[
+                    subprocess.TimeoutExpired("make", 60),
+                    Mock(returncode=0, stderr=""),
+                ],
+            ),
+            patch("aegis.core.template_cleanup.time.sleep"),
+        ):
+            result = format_code(tmp_path)
+
+            assert result is True
 
 
 class TestRunPostGenerationTasks:

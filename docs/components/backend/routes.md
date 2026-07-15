@@ -135,7 +135,7 @@ Aegis does not strip FastAPI's defaults:
 
 These are excluded from Logfire's HTTP instrumentation along with
 `/health/*` and `/dashboard/*`. See
-[middleware -> logfire_tracing](middleware.md#logfire_tracingpy-observability-only).
+[middleware -> Logfire Tracing](middleware.md#logfire-tracing).
 
 ## Reference
 

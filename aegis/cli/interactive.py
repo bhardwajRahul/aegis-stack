@@ -255,11 +255,15 @@ def set_database_engine_selection(engine: str | None) -> None:
 
 
 def get_interactive_infrastructure_components() -> list[ComponentSpec]:
-    """Get infrastructure components available for interactive selection."""
-    # Get all infrastructure components
+    """Get optional components available for interactive selection.
+
+    Everything non-CORE is offered — infrastructure and optional
+    frontends alike; CORE components are always present so there is
+    nothing to ask.
+    """
     infra_components = []
     for component_spec in COMPONENTS.values():
-        if component_spec.type == ComponentType.INFRASTRUCTURE:
+        if component_spec.type != ComponentType.CORE:
             infra_components.append(component_spec)
 
     # Sort by name for consistent ordering
@@ -527,10 +531,11 @@ def run_project_selection(ui: SelectionUI) -> ProjectSelection:
     )
     ui.echo(t("interactive.infra_header"))
 
-    # Process components in registry order to handle dependencies.
+    # Process components in registry order to handle dependencies. Every
+    # non-CORE type (infrastructure, frontend) is a real question.
     for component_name in ComponentNames.INFRASTRUCTURE_ORDER:
         spec = COMPONENTS.get(component_name)
-        if spec is None or spec.type != ComponentType.INFRASTRUCTURE:
+        if spec is None or spec.type == ComponentType.CORE:
             continue
         step = _COMPONENT_STEPS.get(component_name, _step_generic_component)
         step(spec, state, ui)

@@ -28,6 +28,7 @@ from aegis.core.file_manifest import (
 )
 from aegis.core.project_map import render_project_map
 from aegis.core.services import SERVICES
+from aegis.core.template_cleanup import run_resilient
 from aegis.i18n import t
 
 from ..cli import brand
@@ -109,6 +110,150 @@ def remove_dir(project_path: Path, dirpath: str) -> None:
         shutil.rmtree(full_path)
 
 
+def cleanup_worker_backend_files(project_path: Path, worker_backend: str) -> None:
+    """Resolve worker backend variant files to canonical names (Pattern D).
+
+    Worker backend variants ship as sibling files (``pools_dramatiq.py``,
+    ``queues/system_taskiq.py``, ...). For the chosen backend the variants
+    are renamed onto the canonical names; every other backend's files are
+    removed. Shared by init (``cleanup_components``) and the add path
+    (``ManualUpdater.add_component``) — without this the add path leaves
+    arq code at the canonical names with the variants strewn alongside.
+
+    Args:
+        project_path: Path to the generated project
+        worker_backend: Chosen backend (``arq``, ``taskiq``, or ``dramatiq``)
+    """
+    queues_dir = project_path / "app/components/worker/queues"
+    worker_dir = project_path / "app/components/worker"
+    api_dir = project_path / "app/components/backend/api"
+    services_dir = project_path / "app/services"
+    lt_worker_dir = project_path / "app/services/load_test/worker"
+
+    # Helper: remove all files matching a suffix pattern
+    def _remove_backend_files(suffix: str) -> None:
+        """Remove all files with the given backend suffix."""
+        for f in queues_dir.glob(f"*{suffix}"):
+            f.unlink()
+        for name in [
+            f"middleware{suffix}",
+            f"pools{suffix}",
+            f"registry{suffix}",
+            f"broker{suffix}",
+        ]:
+            target = worker_dir / name
+            if target.exists():
+                target.unlink()
+        api_file = api_dir / f"worker{suffix}"
+        if api_file.exists():
+            api_file.unlink()
+        # Legacy flat variant (pre-package layout); newer templates ship
+        # the variant inside the load_test package instead.
+        load_test_file = services_dir / f"load_test{suffix}"
+        if load_test_file.exists():
+            load_test_file.unlink()
+        lt_service = lt_worker_dir / f"service{suffix}"
+        if lt_service.exists():
+            lt_service.unlink()
+
+    # Helper: rename backend-specific files to canonical names
+    def _rename_backend_files(suffix: str) -> set[str]:
+        """Rename *_<backend>.py files to *.py, return set of final names."""
+        final_names = {"__init__.py"}
+
+        # Rename queue files
+        if queues_dir.exists():
+            for backend_file in queues_dir.glob(f"*{suffix}"):
+                final_name = backend_file.name.replace(suffix, ".py")
+                arq_file = backend_file.with_name(final_name)
+                if arq_file.exists():
+                    arq_file.unlink()
+                backend_file.rename(queues_dir / final_name)
+                final_names.add(final_name)
+
+        # Rename worker-dir files (pools, registry, middleware, broker)
+        for stem in ["pools", "registry", "middleware", "broker"]:
+            backend_file = worker_dir / f"{stem}{suffix}"
+            canonical = worker_dir / f"{stem}.py"
+            if backend_file.exists():
+                if canonical.exists():
+                    canonical.unlink()
+                backend_file.rename(canonical)
+
+        # Rename API file
+        api_backend = api_dir / f"worker{suffix}"
+        api_canonical = api_dir / "worker.py"
+        if api_backend.exists():
+            if api_canonical.exists():
+                api_canonical.unlink()
+            api_backend.rename(api_canonical)
+
+        # Rename the load_test worker service variant INSIDE the package.
+        # (The legacy flat ``load_test_<backend>.py`` rename produced
+        # ``app/services/load_test.py``, which the ``load_test/`` package
+        # shadowed — non-arq stacks then imported the arq-only service
+        # and crashed at startup.)
+        lt_service_backend = lt_worker_dir / f"service{suffix}"
+        lt_service_canonical = lt_worker_dir / "service.py"
+        if lt_service_backend.exists():
+            if lt_service_canonical.exists():
+                lt_service_canonical.unlink()
+            lt_service_backend.rename(lt_service_canonical)
+
+        # Legacy flat variant (pre-package layout) for older trees.
+        lt_backend = services_dir / f"load_test{suffix}"
+        lt_canonical = services_dir / "load_test.py"
+        if lt_backend.exists():
+            if lt_canonical.exists():
+                lt_canonical.unlink()
+            lt_backend.rename(lt_canonical)
+
+        return final_names
+
+    if not queues_dir.exists():
+        return
+
+    if worker_backend == WorkerBackends.DRAMATIQ:
+        # Using Dramatiq: rename _dramatiq.py files, remove arq + taskiq.
+        # Capture whether the template shipped *_dramatiq.py sources
+        # this run BEFORE renaming consumes them — this is the signal
+        # that distinguishes init (sources present) from update (only
+        # canonical files left from a prior init). On update we must
+        # NOT run the arq-cleanup glob below, otherwise we'd unlink
+        # the canonical system.py / load_test.py we already renamed
+        # last time. See issue #672.
+        has_dramatiq_sources = any(queues_dir.glob("*_dramatiq.py"))
+        dramatiq_final_names = _rename_backend_files("_dramatiq.py")
+
+        if has_dramatiq_sources:
+            # Remove arq-only queue files (those without dramatiq
+            # counterparts) shipped alongside the just-renamed sources.
+            for py_file in queues_dir.glob("*.py"):
+                if py_file.name not in dramatiq_final_names:
+                    py_file.unlink()
+
+        _remove_backend_files("_taskiq.py")
+
+    elif worker_backend == WorkerBackends.TASKIQ:
+        # Using TaskIQ: rename _taskiq.py files, remove arq + dramatiq.
+        # See dramatiq branch above for the init-vs-update rationale
+        # (issue #672).
+        has_taskiq_sources = any(queues_dir.glob("*_taskiq.py"))
+        taskiq_final_names = _rename_backend_files("_taskiq.py")
+
+        if has_taskiq_sources:
+            for py_file in queues_dir.glob("*.py"):
+                if py_file.name not in taskiq_final_names:
+                    py_file.unlink()
+
+        _remove_backend_files("_dramatiq.py")
+
+    else:
+        # Using arq (default): remove taskiq and dramatiq versions
+        _remove_backend_files("_taskiq.py")
+        _remove_backend_files("_dramatiq.py")
+
+
 def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     """
     Remove component files based on component selection.
@@ -164,134 +309,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     # above by the Pattern A loop; this branch only runs when worker IS
     # selected and renames/strips backend-specific suffixes.
     if is_enabled(AnswerKeys.WORKER):
-        # Worker is included - clean up backend-specific files
         worker_backend = context.get(AnswerKeys.WORKER_BACKEND, WorkerBackends.ARQ)
-        queues_dir = project_path / "app/components/worker/queues"
-        worker_dir = project_path / "app/components/worker"
-        api_dir = project_path / "app/components/backend/api"
-        services_dir = project_path / "app/services"
-        lt_worker_dir = project_path / "app/services/load_test/worker"
-
-        # Helper: remove all files matching a suffix pattern
-        def _remove_backend_files(suffix: str) -> None:
-            """Remove all files with the given backend suffix."""
-            for f in queues_dir.glob(f"*{suffix}"):
-                f.unlink()
-            for name in [
-                f"middleware{suffix}",
-                f"pools{suffix}",
-                f"registry{suffix}",
-                f"broker{suffix}",
-            ]:
-                target = worker_dir / name
-                if target.exists():
-                    target.unlink()
-            api_file = api_dir / f"worker{suffix}"
-            if api_file.exists():
-                api_file.unlink()
-            # Legacy flat variant (pre-package layout); newer templates ship
-            # the variant inside the load_test package instead.
-            load_test_file = services_dir / f"load_test{suffix}"
-            if load_test_file.exists():
-                load_test_file.unlink()
-            lt_service = lt_worker_dir / f"service{suffix}"
-            if lt_service.exists():
-                lt_service.unlink()
-
-        # Helper: rename backend-specific files to canonical names
-        def _rename_backend_files(suffix: str) -> set[str]:
-            """Rename *_<backend>.py files to *.py, return set of final names."""
-            final_names = {"__init__.py"}
-
-            # Rename queue files
-            if queues_dir.exists():
-                for backend_file in queues_dir.glob(f"*{suffix}"):
-                    final_name = backend_file.name.replace(suffix, ".py")
-                    arq_file = backend_file.with_name(final_name)
-                    if arq_file.exists():
-                        arq_file.unlink()
-                    backend_file.rename(queues_dir / final_name)
-                    final_names.add(final_name)
-
-            # Rename worker-dir files (pools, registry, middleware, broker)
-            for stem in ["pools", "registry", "middleware", "broker"]:
-                backend_file = worker_dir / f"{stem}{suffix}"
-                canonical = worker_dir / f"{stem}.py"
-                if backend_file.exists():
-                    if canonical.exists():
-                        canonical.unlink()
-                    backend_file.rename(canonical)
-
-            # Rename API file
-            api_backend = api_dir / f"worker{suffix}"
-            api_canonical = api_dir / "worker.py"
-            if api_backend.exists():
-                if api_canonical.exists():
-                    api_canonical.unlink()
-                api_backend.rename(api_canonical)
-
-            # Rename the load_test worker service variant INSIDE the package.
-            # (The legacy flat ``load_test_<backend>.py`` rename produced
-            # ``app/services/load_test.py``, which the ``load_test/`` package
-            # shadowed — non-arq stacks then imported the arq-only service
-            # and crashed at startup.)
-            lt_service_backend = lt_worker_dir / f"service{suffix}"
-            lt_service_canonical = lt_worker_dir / "service.py"
-            if lt_service_backend.exists():
-                if lt_service_canonical.exists():
-                    lt_service_canonical.unlink()
-                lt_service_backend.rename(lt_service_canonical)
-
-            # Legacy flat variant (pre-package layout) for older trees.
-            lt_backend = services_dir / f"load_test{suffix}"
-            lt_canonical = services_dir / "load_test.py"
-            if lt_backend.exists():
-                if lt_canonical.exists():
-                    lt_canonical.unlink()
-                lt_backend.rename(lt_canonical)
-
-            return final_names
-
-        if queues_dir.exists():
-            if worker_backend == WorkerBackends.DRAMATIQ:
-                # Using Dramatiq: rename _dramatiq.py files, remove arq + taskiq.
-                # Capture whether the template shipped *_dramatiq.py sources
-                # this run BEFORE renaming consumes them — this is the signal
-                # that distinguishes init (sources present) from update (only
-                # canonical files left from a prior init). On update we must
-                # NOT run the arq-cleanup glob below, otherwise we'd unlink
-                # the canonical system.py / load_test.py we already renamed
-                # last time. See issue #672.
-                has_dramatiq_sources = any(queues_dir.glob("*_dramatiq.py"))
-                dramatiq_final_names = _rename_backend_files("_dramatiq.py")
-
-                if has_dramatiq_sources:
-                    # Remove arq-only queue files (those without dramatiq
-                    # counterparts) shipped alongside the just-renamed sources.
-                    for py_file in queues_dir.glob("*.py"):
-                        if py_file.name not in dramatiq_final_names:
-                            py_file.unlink()
-
-                _remove_backend_files("_taskiq.py")
-
-            elif worker_backend == WorkerBackends.TASKIQ:
-                # Using TaskIQ: rename _taskiq.py files, remove arq + dramatiq.
-                # See dramatiq branch above for the init-vs-update rationale
-                # (issue #672).
-                has_taskiq_sources = any(queues_dir.glob("*_taskiq.py"))
-                taskiq_final_names = _rename_backend_files("_taskiq.py")
-
-                if has_taskiq_sources:
-                    for py_file in queues_dir.glob("*.py"):
-                        if py_file.name not in taskiq_final_names:
-                            py_file.unlink()
-
-                _remove_backend_files("_dramatiq.py")
-
-            else:
-                # Using arq (default): remove taskiq and dramatiq versions
-                _remove_backend_files("_taskiq.py")
-                _remove_backend_files("_dramatiq.py")
+        cleanup_worker_backend_files(project_path, worker_backend)
 
     # Remove shared component integration tests only when BOTH scheduler AND worker disabled
     if not is_enabled(AnswerKeys.SCHEDULER) and not is_enabled(AnswerKeys.WORKER):
@@ -811,13 +830,20 @@ def format_code(project_path: Path) -> bool:
         env = os.environ.copy()
         env.pop("VIRTUAL_ENV", None)
 
-        result = subprocess.run(
+        # Retried like run_ruff_on_text: under a loaded machine (parallel
+        # CI, uv cache-lock contention) the spawn can fail or time out, and
+        # skipping here ships an unformatted project — which the add-path
+        # shared-file regen then can't reproduce byte-for-byte.
+        result = run_resilient(
             ["make", "fix"],
             cwd=project_path,
             capture_output=True,
             text=True,
             timeout=POST_GEN_TIMEOUT_FORMAT,
             env=env,
+            retries=5,
+            backoff=1.0,
+            retry_on_signal_kill=True,
         )
 
         if result.returncode == 0:

@@ -35,13 +35,36 @@ from ..constants import (
     WorkerBackends,
 )
 from .build_reporter import BuildReporter
+from .components import COMPONENTS, ComponentType
 from .migration_generator import (
     generate_migrations_for_services,
     get_services_needing_migrations,
 )
 from .post_gen_tasks import cleanup_components, run_post_generation_tasks
+from .services import SERVICES
 from .template_generator import TemplateGenerator
 from .verbosity import is_verbose, verbose_print
+
+
+def derive_include_flags(template_context: dict[str, Any]) -> dict[str, bool]:
+    """One ``include_<name>`` Copier bool per optional component and service.
+
+    The registries are the source of truth for which include flags exist, so
+    a new spec flows into Copier data with no hand-written entry here. The
+    context values are the generator's cookiecutter-era "yes"/"no" strings;
+    a key absent from the context counts as "no".
+    """
+    names = [
+        name for name, spec in COMPONENTS.items() if spec.type != ComponentType.CORE
+    ]
+    names.extend(SERVICES)
+    return {
+        AnswerKeys.include_key(name): template_context.get(
+            AnswerKeys.include_key(name), "no"
+        )
+        == "yes"
+        for name in names
+    }
 
 
 def is_git_repo(path: Path) -> bool:
@@ -111,19 +134,17 @@ def generate_with_copier(
         "version": template_context.get("version", "0.1.0"),
         "python_version": python_version,  # Uses override for RAG + Python 3.14
         "aegis_version": template_context.get("aegis_version", "0.0.0"),
-        # Convert yes/no strings to booleans
-        AnswerKeys.SCHEDULER: template_context[AnswerKeys.SCHEDULER] == "yes",
+        # include_<name> bools, one per optional component/service, derived
+        # from the plugin registries (yes/no strings -> Copier booleans).
+        **derive_include_flags(template_context),
         AnswerKeys.SCHEDULER_BACKEND: template_context[AnswerKeys.SCHEDULER_BACKEND],
         AnswerKeys.SCHEDULER_WITH_PERSISTENCE: template_context[
             AnswerKeys.SCHEDULER_WITH_PERSISTENCE
         ]
         == "yes",
-        AnswerKeys.WORKER: template_context[AnswerKeys.WORKER] == "yes",
         AnswerKeys.WORKER_BACKEND: template_context.get(
             AnswerKeys.WORKER_BACKEND, WorkerBackends.ARQ
         ),
-        AnswerKeys.REDIS: template_context[AnswerKeys.REDIS] == "yes",
-        AnswerKeys.DATABASE: template_context[AnswerKeys.DATABASE] == "yes",
         AnswerKeys.DATABASE_ENGINE: template_context.get(
             AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
         ),
@@ -131,10 +152,6 @@ def generate_with_copier(
             AnswerKeys.POSTGRES_PROVIDER, PostgresProviders.CONTAINER
         ),
         AnswerKeys.CACHE: False,  # Default to no
-        AnswerKeys.INGRESS: template_context.get(AnswerKeys.INGRESS, "no") == "yes",
-        AnswerKeys.OBSERVABILITY: template_context.get(AnswerKeys.OBSERVABILITY, "no")
-        == "yes",
-        AnswerKeys.AUTH: template_context.get(AnswerKeys.AUTH, "no") == "yes",
         AnswerKeys.AUTH_LEVEL: template_context.get(
             AnswerKeys.AUTH_LEVEL, AuthLevels.BASIC
         ),
@@ -142,9 +159,6 @@ def generate_with_copier(
         AnswerKeys.AUTH_ORG: template_context.get(AnswerKeys.AUTH_ORG, "no") == "yes",
         AnswerKeys.AUTH_OAUTH: template_context.get(AnswerKeys.AUTH_OAUTH, "no")
         == "yes",
-        AnswerKeys.AI: template_context.get(AnswerKeys.AI, "no") == "yes",
-        AnswerKeys.COMMS: template_context.get(AnswerKeys.COMMS, "no") == "yes",
-        AnswerKeys.BLOG: template_context.get(AnswerKeys.BLOG, "no") == "yes",
         AnswerKeys.AI_FRAMEWORK: template_context.get(
             AnswerKeys.AI_FRAMEWORK, AIFrameworks.PYDANTIC_AI
         ),
@@ -163,7 +177,6 @@ def generate_with_copier(
         AnswerKeys.OLLAMA_MODE: template_context.get(
             AnswerKeys.OLLAMA_MODE, OllamaMode.NONE
         ),
-        AnswerKeys.INSIGHTS: template_context.get(AnswerKeys.INSIGHTS, "no") == "yes",
         AnswerKeys.INSIGHTS_GITHUB: template_context.get(
             AnswerKeys.INSIGHTS_GITHUB, "no"
         )
@@ -182,11 +195,9 @@ def generate_with_copier(
             AnswerKeys.INSIGHTS_PER_USER, "no"
         )
         == "yes",
-        AnswerKeys.PAYMENT: template_context.get(AnswerKeys.PAYMENT, "no") == "yes",
         AnswerKeys.PAYMENT_PROVIDER: template_context.get(
             AnswerKeys.PAYMENT_PROVIDER, PaymentProviders.DEFAULT
         ),
-        AnswerKeys.FINANCE: template_context.get(AnswerKeys.FINANCE, "no") == "yes",
     }
 
     # Detect dev vs production mode for template sourcing

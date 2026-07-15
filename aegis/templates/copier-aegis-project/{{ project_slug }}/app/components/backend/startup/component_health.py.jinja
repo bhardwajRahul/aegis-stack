@@ -400,6 +400,69 @@ async def _frontend_component_health() -> ComponentStatus:
             },
         )
 
+{%- if include_htmx %}
+
+
+async def _web_frontend_component_health() -> ComponentStatus:
+    """
+    htmx web frontend health check.
+
+    The web frontend renders in this process, so the signals worth reporting
+    are whether its router imports, whether the directory it renders
+    templates from exists, and whether an asset build has produced a
+    fingerprinted manifest. A missing manifest is the normal dev state -
+    pages fall back to unhashed asset paths - so it is reported as metadata
+    rather than treated as a failure.
+    """
+    try:
+        from app.components.web_frontend.main import create_web_frontend_app
+        from app.core.config import settings
+
+        project_root = Path(__file__).resolve().parents[4]
+        templates_dir = project_root / settings.WEB_TEMPLATES_DIR
+        manifest = project_root / settings.WEB_STATIC_DIR / "dist" / "manifest.json"
+
+        return ComponentStatus(
+            name="web_frontend",
+            status=ComponentStatusType.HEALTHY,
+            message="htmx web frontend component available",
+            response_time_ms=None,
+            metadata={
+                "type": "component_check",
+                "framework": "Jinja2 + htmx",
+                "routes": len(create_web_frontend_app().routes),
+                "templates_dir_present": templates_dir.is_dir(),
+                "assets_built": manifest.is_file(),
+                "note": "Server-rendered pages mounted at /",
+            },
+        )
+
+    except ImportError as e:
+        return ComponentStatus(
+            name="web_frontend",
+            status=ComponentStatusType.UNHEALTHY,
+            message="Web frontend component not found",
+            response_time_ms=None,
+            metadata={
+                "type": "component_check",
+                "error": "import_error",
+                "error_details": str(e),
+            },
+        )
+    except Exception as e:
+        return ComponentStatus(
+            name="web_frontend",
+            status=ComponentStatusType.UNHEALTHY,
+            message=f"Web frontend component error: {str(e)}",
+            response_time_ms=None,
+            metadata={
+                "type": "component_check",
+                "error": "unexpected_error",
+                "error_details": str(e),
+            },
+        )
+{%- endif %}
+
 {%- if include_scheduler %}
 
 
@@ -483,6 +546,12 @@ async def startup_hook() -> None:
     # Note: Frontend (Flet) is integrated into the Server card, no separate check needed
     register_health_check("backend", _backend_component_health)
     logger.info("Backend component health check registered")
+
+    {%- if include_htmx %}
+    # Register web frontend health check (server-rendered pages at /)
+    register_health_check("web_frontend", _web_frontend_component_health)
+    logger.info("Web frontend component health check registered")
+    {%- endif %}
 
     {%- if include_scheduler %}
     # Register scheduler component health check

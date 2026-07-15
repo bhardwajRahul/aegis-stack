@@ -417,24 +417,22 @@ def test_dependency_resolution_performance() -> None:
 
 
 def test_interactive_selection_registry_sync() -> None:
-    """Test that interactive selection includes all infrastructure components."""
+    """Test that interactive selection includes every optional component."""
     from aegis.cli.interactive import get_interactive_infrastructure_components
 
     # Get components from registry
     infra_components = get_interactive_infrastructure_components()
     infra_names = {comp.name for comp in infra_components}
 
-    # Get infrastructure components directly from registry
+    # Every non-CORE component (infrastructure or frontend) is selectable
     registry_infra_names = {
-        name
-        for name, spec in COMPONENTS.items()
-        if spec.type == ComponentType.INFRASTRUCTURE
+        name for name, spec in COMPONENTS.items() if spec.type != ComponentType.CORE
     }
 
-    # Interactive selection should include all infrastructure components
+    # Interactive selection should include all optional components
     assert infra_names == registry_infra_names, (
         f"Interactive selection components ({infra_names}) don't match "
-        f"registry infrastructure components ({registry_infra_names}). "
+        f"registry optional components ({registry_infra_names}). "
         f"Missing from interactive: {registry_infra_names - infra_names}, "
         f"Extra in interactive: {infra_names - registry_infra_names}"
     )

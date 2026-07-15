@@ -126,8 +126,14 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
         components=("database", "scheduler"), services=("finance",)
     ),
     "comms_only": ProjectTemplateSpec(services=("comms",)),
+    # htmx web frontend. The Flet frontend is CORE and still present in both:
+    # htmx is additive, so these stacks have two frontends.
+    "base_htmx": ProjectTemplateSpec(components=("htmx",)),
+    "htmx_auth": ProjectTemplateSpec(
+        components=("htmx", "database"), services=("auth",)
+    ),
     "everything": ProjectTemplateSpec(
-        components=("database", "scheduler", "worker", "redis"),
+        components=("database", "scheduler", "worker", "redis", "htmx"),
         services=("auth[org]", "ai[sqlite]", "insights", "payment", "blog", "comms"),
     ),
 }

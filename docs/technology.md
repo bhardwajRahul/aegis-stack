@@ -62,6 +62,19 @@ It was the missing piece that finally let me use all those backend skills - Fast
 
 Also, allows me to live out my fantasy of Python, python, and nothing but python, so help me god :)
 
+### [htmx](https://htmx.org/) + [Alpine.js](https://alpinejs.dev/) + [DaisyUI](https://daisyui.com/)
+
+Flet is not the only frontend anymore. The optional `htmx` component adds a
+second, HTML-first surface: Jinja2 templates rendered by the same FastAPI
+process, htmx for interactivity, Alpine for client-side state, Tailwind and
+DaisyUI for styling. No JavaScript build chain to author against - the CSS is
+precompiled and the JS libraries are two script tags.
+
+The two frontends are complementary rather than competing. Flet stays the
+operator dashboard at `/dashboard`; the htmx side serves public, content-first
+pages at `/`. Both import the same services and the same Pydantic models, so
+choosing where a page lives never means duplicating logic.
+
 ## The Astral Revolution
 
 ### [ruff](https://docs.astral.sh/ruff/), [uv](https://docs.astral.sh/uv/), [ty](https://docs.astral.sh/ty/), [uvx](https://docs.astral.sh/uv/guides/tools/)

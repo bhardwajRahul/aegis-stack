@@ -37,6 +37,7 @@ MESSAGES: dict[str, str] = {
     "init.config_name": "名前：",
     "init.config_core": "コア：",
     "init.config_infra": "インフラ：",
+    "init.config_web_frontend": "Web frontend:",
     "init.config_services": "サービス：",
     "init.component_files": "コンポーネントファイル：",
     "init.entrypoints": "エントリーポイント：",
@@ -67,6 +68,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "SQLModel ORM 付きデータベース（SQLite / PostgreSQL）",
     "component.ingress": "Traefik リバースプロキシ＆ロードバランサー",
     "component.observability": "Logfire による監視・トレース・メトリクス",
+    "component.htmx": "Server-rendered htmx web frontend",
     # ── サービス説明 ────────────────────────────────────────────────────
     "service.auth": "JWT トークンによるユーザー認証・認可",
     "service.ai": "マルチフレームワーク対応 AI チャットボットサービス",
@@ -534,6 +536,7 @@ MESSAGES: dict[str, str] = {
         "  frontend     - Flet フロントエンドインターフェース（常に含まれます）"
     ),
     "components.infra_title": "インフラコンポーネント",
+    "components.frontend_title": "FRONTEND COMPONENTS",
     "components.requires": "必須：{deps}",
     "components.recommends": "推奨：{deps}",
     "components.usage_hint": (
@@ -1056,6 +1059,7 @@ MESSAGES: dict[str, str] = {
     "guided.hint.files": "ファイル",
     "guided.review.core": "コア：",
     "guided.review.infrastructure": "インフラ：",
+    "guided.review.web_frontend": "Web frontend:",
     "guided.review.services": "サービス：",
     "guided.review.auto": "自動",
     "guided.review.build": "{name} を生成",
@@ -1072,6 +1076,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "キャッシュおよびメッセージブローカーとして使われるインメモリデータストア。バックグラウンドのジョブキューやサービス間の pub/sub メッセージングを支え、リクエストハンドラーに高速な共有キャッシュを提供します。",
     "component.ingress.long": "Traefik によるリバースプロキシとトラフィックルーティング。サービスの自動検出、管理エンドポイントの保護、Let's Encrypt による任意の TLS を提供します。デプロイの玄関口です。",
     "component.observability.long": "Pydantic Logfire による分散トレーシング、メトリクス、ログ相関。アプリケーションを自動計装し、有効にしたコンポーネントに合わせて適応するので、本番環境の実際の挙動を把握できます。",
+    "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "JWT 認証、セッション Cookie、リフレッシュトークンのローテーションを備えた完全なユーザー管理。3 つのレベル：基本のメール/パスワード、RBAC のロールと権限、マルチテナント組織。登録、ログイン、管理ダッシュボードのタブを含みます。",
     "service.ai.long": "完全な AI プラットフォーム：マルチプロバイダーのチャット、約 2000 モデルの LLM カタログ、利用状況分析を伴うコスト追跡、コードベースを理解する会話のための任意の RAG、任意の音声（TTS/STT）。フレームワークは Pydantic AI または LangChain から選べます。",
     "service.comms.long": "主要なプロバイダーを使ったメール、SMS、音声通話：メールは Resend、SMS と音声は Twilio。どちらも無料枠があるので、クレジットカードなしで始められます。",

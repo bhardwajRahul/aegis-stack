@@ -19,6 +19,7 @@ class ComponentNames:
     DATABASE = "database"
     BACKEND = "backend"
     FRONTEND = "frontend"
+    HTMX = "htmx"
     INGRESS = "ingress"
     OBSERVABILITY = "observability"
 
@@ -27,7 +28,15 @@ class ComponentNames:
     # users never see the redis question; scheduler/database sit early
     # because their answers fix the project's database engine, which
     # later questions (AI storage) reuse.
-    INFRASTRUCTURE_ORDER = [WORKER, SCHEDULER, DATABASE, REDIS, INGRESS, OBSERVABILITY]
+    INFRASTRUCTURE_ORDER = [
+        WORKER,
+        SCHEDULER,
+        DATABASE,
+        REDIS,
+        INGRESS,
+        OBSERVABILITY,
+        HTMX,
+    ]
 
 
 class StorageBackends:
@@ -155,6 +164,7 @@ class AnswerKeys:
     ANSWERS_FILENAME = ".copier-answers.yml"
 
     # Component include flags
+    HTMX = "include_htmx"
     SCHEDULER = "include_scheduler"
     WORKER = "include_worker"
     REDIS = "include_redis"

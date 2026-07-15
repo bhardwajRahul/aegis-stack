@@ -15,7 +15,7 @@ from aegis.core.copier_manager import (
     load_copier_answers,
 )
 
-from .test_utils import run_aegis_command
+from .test_utils import format_file_like_regen, run_aegis_command
 
 ProjectFactory = Callable[..., Path]
 
@@ -556,6 +556,83 @@ class TestAddCommandIntegration:
         # Verify test file has database fixtures
         test_content = test_file.read_text()
         assert "db_session" in test_content or "database" in test_content.lower()
+
+
+class TestAddHtmxComponent:
+    """Test 'aegis add htmx' on an existing project.
+
+    The htmx component's template file tree lands with HF-03/HF-04; at this
+    stage adding it must still flip the answers flag and complete cleanly so
+    a later `aegis update` renders the htmx side.
+    """
+
+    def test_add_htmx_updates_answers(self, project_factory: ProjectFactory) -> None:
+        """Adding htmx sets include_htmx: true in .copier-answers.yml."""
+        project_path = project_factory()
+
+        initial_answers = load_copier_answers(project_path)
+        assert not initial_answers.get("include_htmx")
+
+        result = run_aegis_command(
+            "add", "htmx", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"add htmx failed: {result.stderr}"
+        answers = load_copier_answers(project_path)
+        assert answers.get("include_htmx") is True
+
+    def test_add_htmx_leaves_flet_frontend_alone(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """Adding htmx must not inject anything into the core Flet frontend.
+
+        theme.py sits outside the shared-file set, so it must be
+        byte-identical; main.py is a registered shared file the regen
+        rewrites, so assert no htmx leakage in its content (byte-identity
+        for it is covered by test_add_regen_matches_init_formatting).
+        """
+        project_path = project_factory()
+        frontend = project_path / "app" / "components" / "frontend"
+        theme_before = (frontend / "theme.py").read_text()
+
+        result = run_aegis_command(
+            "add", "htmx", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"add htmx failed: {result.stderr}"
+        assert (frontend / "theme.py").read_text() == theme_before
+        main_after = (frontend / "main.py").read_text()
+        assert "htmx" not in main_after
+        assert "web_frontend" not in main_after
+
+    def test_add_regen_matches_init_formatting(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """Shared-file regen must produce the same bytes init produced.
+
+        Init runs the project's ruff (check --fix + format) over generated
+        code; the add-path regen writes raw template renders. For a shared
+        file the operation doesn't actually change (htmx touches nothing in
+        frontend/main.py), the regenerated file must be byte-identical to
+        the init output — otherwise every `aegis add` leaves cosmetic drift
+        like a stripped-at-init unused `import json` reappearing.
+
+        ``before`` is normalized here through the same ruff helper the regen
+        uses, rather than trusting init's non-critical `make fix` to have
+        succeeded — that step can silently fail under load, and this test
+        must catch regen drift, not fixture noise.
+        """
+        project_path = project_factory()
+        flet_main = project_path / "app" / "components" / "frontend" / "main.py"
+        format_file_like_regen(flet_main, project_path)
+        before = flet_main.read_text()
+
+        result = run_aegis_command(
+            "add", "htmx", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"add htmx failed: {result.stderr}"
+        assert flet_main.read_text() == before
 
 
 class TestAddCommandInteractive:

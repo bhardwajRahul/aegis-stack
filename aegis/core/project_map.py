@@ -96,6 +96,7 @@ def render_project_map(
     # Detect what exists
     has_scheduler = (app / "components" / "scheduler").exists()
     has_worker = (app / "components" / "worker").exists()
+    has_htmx = (app / "components" / "web_frontend").exists()
     has_observability = (
         app / "components" / "backend" / "middleware" / "logfire_tracing.py"
     ).exists()
@@ -121,6 +122,8 @@ def render_project_map(
     # Build component children
     component_children: list[tuple[str, str, str]] = []  # (name, desc, check_name)
     component_children.append(("frontend/", "Flet UI", "frontend"))
+    if has_htmx:
+        component_children.append(("web_frontend/", "htmx UI", "htmx"))
     if has_scheduler:
         component_children.append(("scheduler/", "APScheduler", "scheduler"))
     if has_worker:

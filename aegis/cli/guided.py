@@ -943,18 +943,34 @@ class GuidedSelectionUI:
         grid.add_row(Text())
 
         auto = set(plan.service_component_map) | set(plan.auto_added_components)
-        if plan.infrastructure:
-            infra = Text()
-            infra.append(
-                f"{_g('review.infrastructure', 'Infrastructure:')}  ", style=LABEL
-            )
-            for i, comp in enumerate(plan.infrastructure):
+
+        def _component_row(label: str, names: list[str]) -> Text:
+            row = Text()
+            row.append(label, style=LABEL)
+            for i, comp in enumerate(names):
                 if i:
-                    infra.append(" · ", style=RULE_STYLE)
-                infra.append(comp, style=BODY)
+                    row.append(" · ", style=RULE_STYLE)
+                row.append(comp, style=BODY)
                 if comp.split("[", 1)[0] in auto or comp in auto:
-                    infra.append(f" {_g('review.auto', 'auto')}", style=MUTED)
-            grid.add_row(infra)
+                    row.append(f" {_g('review.auto', 'auto')}", style=MUTED)
+            return row
+
+        # Grouped by type: an optional frontend is not infrastructure. Labels
+        # are padded to the same width as Core:/Services: above.
+        if plan.infrastructure:
+            grid.add_row(
+                _component_row(
+                    f"{_g('review.infrastructure', 'Infrastructure:')}  ",
+                    plan.infrastructure,
+                )
+            )
+        if plan.frontend:
+            grid.add_row(
+                _component_row(
+                    f"{_g('review.web_frontend', 'Web frontend:')}    ",
+                    plan.frontend,
+                )
+            )
         if plan.services:
             grid.add_row(Text())
             grid.add_row(
