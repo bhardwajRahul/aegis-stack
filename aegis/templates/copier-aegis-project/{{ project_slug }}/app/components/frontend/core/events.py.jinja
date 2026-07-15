@@ -56,6 +56,27 @@ async def on_connect(event: ft.ControlEvent) -> None:
                     view=type(current).__name__,
                 )
 
+    # A reconnect rebuilds the client, which can come back without the
+    # overlay popups the server still considers open (observed when
+    # launch_url opens a provider tab: the browser pauses this tab, the
+    # socket blips, and the reconnected client renders without the open
+    # modal). Re-assert them with a real visibility delta so the rebuilt
+    # client shows what the user had open.
+    from app.components.frontend.dashboard.modals.base_popup import BasePopup
+
+    open_popups = [
+        control
+        for control in page.overlay
+        if isinstance(control, BasePopup) and control.visible
+    ]
+    logger.info("page.on_connect.open_popups", count=len(open_popups))
+    for popup in open_popups:
+        popup.hide()
+        page.update()
+        popup.show()
+    if open_popups:
+        page.update()
+
 
 async def on_disconnect(event: ft.ControlEvent) -> None:
     page: ft.Page = event.page

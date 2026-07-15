@@ -1121,6 +1121,95 @@ class FinanceService:
         await self.db.flush()
         return security
 
+    async def upsert_provider_security(
+        self,
+        *,
+        provider: str,
+        provider_security_id: str,
+        ticker: str | None = None,
+        name: str | None = None,
+        security_type: str | None = None,
+        cusip: str | None = None,
+        isin: str | None = None,
+        figi: str | None = None,
+        currency: str = _DEFAULT_CURRENCY,
+        close_price: int | None = None,
+        price_scale: int = 2,
+    ) -> FinanceSecurity:
+        """Resolve a provider-reported security to ONE catalog row and update it.
+
+        Resolution order: ``(provider, provider_security_id)`` — the
+        same-provider fast path — then FIGI, then CUSIP, then ISIN. The
+        standard identifiers are the cross-provider merge keys (each is
+        partial-unique on the table), so the same instrument reported by two
+        aggregators lands on one row instead of two.
+
+        A row matched through an identifier keeps its original
+        ``provider``/``provider_security_id`` (first cataloger wins) and its
+        descriptive fields are only filled where missing; the matching
+        provider still finds the row again next sync via the identifier.
+        Identifier columns themselves are fill-if-missing, never overwritten:
+        a provider that stops sending (or disagrees about) a FIGI can neither
+        null out the key nor collide with another row's.
+        """
+        await self.get_or_create_currency(currency)
+        security = (
+            await self.db.exec(
+                select(FinanceSecurity).where(
+                    FinanceSecurity.provider == provider,
+                    FinanceSecurity.provider_security_id == provider_security_id,
+                )
+            )
+        ).first()
+        owns_row = security is not None
+        if security is None:
+            for column, value in (
+                (FinanceSecurity.figi, figi),
+                (FinanceSecurity.cusip, cusip),
+                (FinanceSecurity.isin, isin),
+            ):
+                if not value:
+                    continue
+                security = (
+                    await self.db.exec(
+                        select(FinanceSecurity).where(column == value)
+                    )
+                ).first()
+                if security is not None:
+                    break
+        if security is None:
+            security = FinanceSecurity(
+                provider=provider, provider_security_id=provider_security_id
+            )
+            owns_row = True
+        if owns_row:
+            # Update only what the payload actually carries: partial payloads
+            # (e.g. an activities row with no pricing) must not erase catalog
+            # data a fuller sync already stored.
+            if ticker is not None:
+                security.ticker = ticker
+            if name is not None:
+                security.name = name
+            if security_type is not None:
+                security.security_type = security_type
+            security.currency = currency
+            if close_price is not None:
+                security.close_price = close_price
+                security.price_scale = price_scale
+        else:
+            security.ticker = security.ticker or ticker
+            security.name = security.name or name
+            security.security_type = security.security_type or security_type
+            if close_price is not None:
+                security.close_price = close_price
+                security.price_scale = price_scale
+        security.cusip = security.cusip or cusip
+        security.isin = security.isin or isin
+        security.figi = security.figi or figi
+        self.db.add(security)
+        await self.db.flush()
+        return security
+
     async def upsert_security_price(
         self,
         *,

@@ -197,6 +197,45 @@ async def test_net_worth_series_after_recompute(
 
 
 @pytest.mark.asyncio
+async def test_all_trades_across_accounts(
+    async_client_with_db: TestClient, async_db_session: AsyncSession
+) -> None:
+    """FIN-25: GET /trades returns investment activity across every account,
+    newest first — the All Accounts register's investment lane."""
+    from datetime import date
+
+    service = FinanceService(async_db_session)
+    roth = await service.create_manual_account(
+        name="Roth", account_type="brokerage", classification="asset"
+    )
+    ira = await service.create_manual_account(
+        name="IRA", account_type="brokerage", classification="asset"
+    )
+    await service.upsert_trade(
+        owner_user_id=None,
+        account_id=roth.id,
+        trade_type="buy",
+        trade_date=date(2026, 6, 1),
+        amount=-150_000,
+    )
+    await service.upsert_trade(
+        owner_user_id=None,
+        account_id=ira.id,
+        trade_type="dividend",
+        trade_date=date(2026, 6, 15),
+        amount=1_250,
+    )
+    await async_db_session.commit()
+
+    response = async_client_with_db.get("/api/v1/finance/trades")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    assert [t["type"] for t in body["items"]] == ["dividend", "buy"]
+    assert {t["account_id"] for t in body["items"]} == {roth.id, ira.id}
+
+
+@pytest.mark.asyncio
 async def test_import_batch_report(
     async_client_with_db: TestClient, async_db_session: AsyncSession
 ) -> None:

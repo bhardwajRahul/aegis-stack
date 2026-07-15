@@ -16,10 +16,13 @@ from the frontend). All colours, spacing, and type come from ``AegisTheme``.
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 
 import flet as ft
 
 from app.components.frontend.controls import (
+    ActionMenu,
+    ActionMenuItem,
     ConfirmDialog,
     DataTable,
     DataTableColumn,
@@ -27,6 +30,7 @@ from app.components.frontend.controls import (
     H3Text,
     PrimaryText,
     SecondaryText,
+    StatusTag,
     Tag,
 )
 from app.components.frontend.controls.buttons import PulseButton
@@ -34,9 +38,10 @@ from app.components.frontend.controls.form_fields import FormDropdown, FormTextF
 from app.components.frontend.controls.record_detail import RecordDetailDialog
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.controls.table import TableCellText, TableNameText
+from app.components.frontend.styles import PulseColors
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.config import settings
-from app.services.system.models import ComponentStatus
+from app.services.system.models import ComponentStatus, ComponentStatusType
 from app.services.system.ui import get_component_title
 
 from ..cards.card_utils import get_status_detail
@@ -100,13 +105,19 @@ def _parse_dollars(text: str) -> int:
         return 0
 
 
-def _refresh_row(on_refresh, tooltip: str) -> ft.Control:
+def _refresh_row(
+    on_refresh,
+    tooltip: str,
+    leading: list[ft.Control] | None = None,
+) -> ft.Control:
     """A right-aligned refresh icon-button, matching the pattern used by the
     other dashboard tabs. Flet holds UI state server-side, so a browser refresh
-    won't re-fetch — this button re-pulls the data on demand."""
+    won't re-fetch — this button re-pulls the data on demand. ``leading``
+    controls (e.g. a Connect menu) sit just left of the refresh button."""
     return ft.Row(
         [
             ft.Container(expand=True),
+            *(leading or []),
             ft.IconButton(
                 icon=ft.Icons.REFRESH,
                 icon_color=ft.Colors.ON_SURFACE_VARIANT,
@@ -115,6 +126,7 @@ def _refresh_row(on_refresh, tooltip: str) -> ft.Control:
             ),
         ],
         alignment=ft.MainAxisAlignment.END,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
 
@@ -318,6 +330,128 @@ def trade_detail_sections(trade: dict) -> list[tuple[str, list[tuple[str, str | 
     ]
 
 
+def _connect_menu(items: list[ft.PopupMenuItem]) -> ft.PopupMenuButton:
+    """Compact "Connect" pill gathering the provider connect actions.
+
+    One menu instead of one button per provider: the sidebar is too narrow
+    for a button row, and new providers become menu items rather than
+    overflow. Styled to sit beside a compact teal ``PulseButton`` (same
+    accent recipe: translucent teal fill, 1px teal border, 28px line box).
+    """
+    teal = PulseColors.TEAL
+    return ft.PopupMenuButton(
+        tooltip="Connect an institution",
+        content=ft.Container(
+            content=ft.Row(
+                [
+                    PrimaryText(
+                        "Connect",
+                        size=Theme.Typography.BODY_SMALL,
+                        color=PulseColors.TEXT,
+                        weight=ft.FontWeight.W_500,
+                    ),
+                    ft.Icon(
+                        ft.Icons.ARROW_DROP_DOWN, size=18, color=PulseColors.TEXT
+                    ),
+                ],
+                spacing=2,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            height=28,
+            padding=ft.padding.only(left=10, right=4),
+            bgcolor=ft.Colors.with_opacity(0.10, teal),
+            border=ft.border.all(1, teal),
+            border_radius=6,
+            alignment=ft.alignment.center,
+        ),
+        items=items,
+    )
+
+
+def _build_connect_menu(on_bank, on_brokerage) -> ft.PopupMenuButton | None:
+    """The provider Connect menu, with each item gated on its provider being
+    configured. ``None`` when no provider is configured. Shared by the
+    Accounts sidebar and the Connections tab header."""
+    items: list[ft.PopupMenuItem] = []
+    if getattr(settings, "PLAID_CLIENT_ID", None):
+        items.append(
+            ActionMenuItem(
+                "Connect a bank", ft.Icons.ACCOUNT_BALANCE_OUTLINED, on_bank
+            )
+        )
+    if getattr(settings, "SNAPTRADE_CLIENT_ID", None):
+        items.append(
+            ActionMenuItem("Connect a brokerage", ft.Icons.SHOW_CHART, on_brokerage)
+        )
+    return _connect_menu(items) if items else None
+
+
+async def _connect_bank_flow(
+    page: ft.Page, reload: Callable[[], Awaitable[None]]
+) -> None:
+    """Plaid Hosted Link: open Plaid's hosted connect page in a new tab, then
+    poll server-side (~2.5 min) and reload the caller's view when the
+    connection lands. (In sandbox mode the test credentials live on the
+    Connections tab's Plaid card.)"""
+    from app.components.frontend.state.session_state import get_session_state
+
+    api = get_session_state(page).api_client
+    started = await api.post("/api/v1/finance/plaid/hosted-link", json={})
+    if not (isinstance(started, dict) and started.get("hosted_link_url")):
+        ErrorSnackBar("Could not start Plaid.").launch(page)
+        return
+    page.launch_url(started["hosted_link_url"], web_window_name="_blank")
+    SuccessSnackBar(
+        "Complete the connection in the new tab; your accounts will "
+        "appear here automatically."
+    ).launch(page)
+    link_token = started["link_token"]
+    for _ in range(50):
+        await asyncio.sleep(3)
+        done = await api.post(
+            "/api/v1/finance/plaid/hosted-link/complete",
+            json={"link_token": link_token},
+        )
+        if isinstance(done, dict) and done.get("connections", 0) > 0:
+            synced = sum(r.get("added", 0) for r in done.get("results", []))
+            await reload()
+            SuccessSnackBar(
+                f"Bank connected — {synced} transactions synced."
+            ).launch(page)
+            return
+
+
+async def _connect_brokerage_flow(
+    page: ft.Page, reload: Callable[[], Awaitable[None]]
+) -> None:
+    """SnapTrade connection portal: open it in a new tab, then poll
+    server-side (~2.5 min) until the new authorization lands and reload the
+    caller's view."""
+    from app.components.frontend.state.session_state import get_session_state
+
+    api = get_session_state(page).api_client
+    started = await api.post("/api/v1/finance/snaptrade/connect", json={})
+    if not (isinstance(started, dict) and started.get("redirect_uri")):
+        ErrorSnackBar("Could not start the brokerage connection.").launch(page)
+        return
+    page.launch_url(started["redirect_uri"], web_window_name="_blank")
+    SuccessSnackBar(
+        "Complete the connection in the new tab; your accounts will "
+        "appear here automatically."
+    ).launch(page)
+    for _ in range(50):
+        await asyncio.sleep(3)
+        done = await api.post("/api/v1/finance/snaptrade/connect/complete", json={})
+        if isinstance(done, dict) and done.get("connections", 0) > 0:
+            holdings = sum(r.get("holdings", 0) for r in done.get("results", []))
+            await reload()
+            SuccessSnackBar(
+                f"Brokerage connected — {holdings} holdings synced."
+            ).launch(page)
+            return
+
+
 class AccountsSidebar(ft.Container):
     """Grouped, clickable account list. Calls ``on_select(account | None)`` with
     the full account dict (``None`` for the "All Accounts" row)."""
@@ -339,16 +473,14 @@ class AccountsSidebar(ft.Container):
                 compact=True,
             )
         ]
-        # "Connect a bank" only when Plaid is configured (the flag/creds exist).
-        if getattr(settings, "PLAID_CLIENT_ID", None):
-            actions.append(
-                PulseButton(
-                    on_click_callable=self._connect_bank,
-                    text="Connect a bank",
-                    variant="amber",
-                    compact=True,
-                )
-            )
+        # Provider connects live in one compact menu; each item appears only
+        # when its provider is configured (the flag/creds exist).
+        connect = _build_connect_menu(
+            lambda e: e.page.run_task(self._connect_bank),
+            lambda e: e.page.run_task(self._connect_brokerage),
+        )
+        if connect is not None:
+            actions.append(connect)
         self.content = ft.Column(
             [
                 ft.Container(
@@ -554,14 +686,16 @@ class AccountsSidebar(ft.Container):
         )
 
         async def _cancel() -> None:
-            self.page.close(dialog)
+            dialog.open = False
+            self.page.update()
 
         async def _add() -> None:
             account_name = form["name"].strip()
             if not account_name:
                 ErrorSnackBar("Account name is required.").launch(self.page)
                 return
-            self.page.close(dialog)
+            dialog.open = False
+            self.page.update()
             account_type = type_dd.value or "checking"
             classification = (
                 "liability" if account_type in _LIABILITY_ACCOUNT_TYPES else "asset"
@@ -621,35 +755,10 @@ class AccountsSidebar(ft.Container):
         await self.reload(select_id=result["id"])
 
     async def _connect_bank(self) -> None:
-        """Plaid Hosted Link: open Plaid's hosted connect page, then poll
-        server-side for the result and reload the account list when it lands."""
-        from app.components.frontend.state.session_state import get_session_state
+        await _connect_bank_flow(self.page, self.reload)
 
-        api = get_session_state(self.page).api_client
-        started = await api.post("/api/v1/finance/plaid/hosted-link", json={})
-        if not (isinstance(started, dict) and started.get("hosted_link_url")):
-            ErrorSnackBar("Could not start Plaid.").launch(self.page)
-            return
-        self.page.launch_url(started["hosted_link_url"])
-        SuccessSnackBar(
-            "Complete the connection in the new tab; your accounts will "
-            "appear here automatically."
-        ).launch(self.page)
-        link_token = started["link_token"]
-        # Poll for completion (~2.5 min); Plaid hosts the UI, we hold the auth.
-        for _ in range(50):
-            await asyncio.sleep(3)
-            done = await api.post(
-                "/api/v1/finance/plaid/hosted-link/complete",
-                json={"link_token": link_token},
-            )
-            if isinstance(done, dict) and done.get("connections", 0) > 0:
-                synced = sum(r.get("added", 0) for r in done.get("results", []))
-                await self.reload()
-                SuccessSnackBar(
-                    f"Bank connected — {synced} transactions synced."
-                ).launch(self.page)
-                return
+    async def _connect_brokerage(self) -> None:
+        await _connect_brokerage_flow(self.page, self.reload)
 
 
 def _account_detail_header(account: dict, *, on_rename, on_remove) -> ft.Control:
@@ -830,13 +939,34 @@ class TransactionsPanel(ft.Container):
         data = await api.get("/api/v1/finance/transactions", params=params)
         items = data.get("items", []) if isinstance(data, dict) else []
         total = data.get("total", len(items)) if isinstance(data, dict) else len(items)
+
+        # All Accounts also folds in investment activity: brokerage accounts
+        # ledger trades, not transactions, so a trades-only stack would
+        # otherwise render an empty register.
+        trades: list[dict] = []
+        if self._account is None:
+            activity = await api.get("/api/v1/finance/trades")
+            trades = activity.get("items", []) if isinstance(activity, dict) else []
+            if self._query:
+                q = self._query.lower()
+                trades = [t for t in trades if q in (t.get("name") or "").lower()]
+            total += len(trades)
+
         self._set_subtitle(total)
-        if not items:
+        if not items and not trades:
             self._body.content = EmptyStatePlaceholder(
                 message="No transactions for this account."
             )
             self._refresh()
             return
+
+        merged: list[tuple[str, dict]] = [("txn", t) for t in items] + [
+            ("trade", t) for t in trades
+        ]
+        merged.sort(
+            key=lambda pair: str(pair[1].get("date") or pair[1].get("trade_date")),
+            reverse=True,
+        )
 
         columns = [
             DataTableColumn("Date", width=120),
@@ -844,22 +974,36 @@ class TransactionsPanel(ft.Container):
             DataTableColumn("Source", width=90),
             DataTableColumn("Amount", width=150, alignment="right"),
         ]
-        rows = [
-            [
-                TableCellText(str(txn.get("date", ""))),
-                TableNameText(txn.get("name") or ""),
-                TableCellText(txn.get("source", "")),
-                _amount_cell(txn.get("amount", 0)),
-            ]
-            for txn in items
-        ]
 
-        def _open(index: int, _items: list = items) -> None:
-            RecordDetailDialog(
-                self.page,
-                "Transaction detail",
-                transaction_detail_sections(_items[index]),
-            ).show()
+        def _row(kind: str, record: dict) -> list[ft.Control]:
+            if kind == "trade":
+                return [
+                    TableCellText(str(record.get("trade_date", ""))),
+                    TableNameText(
+                        record.get("name") or _trade_type_label(record.get("type"))
+                    ),
+                    TableCellText(_trade_type_label(record.get("type")).lower()),
+                    _amount_cell(record.get("amount", 0)),
+                ]
+            return [
+                TableCellText(str(record.get("date", ""))),
+                TableNameText(record.get("name") or ""),
+                TableCellText(record.get("source", "")),
+                _amount_cell(record.get("amount", 0)),
+            ]
+
+        rows = [_row(kind, record) for kind, record in merged]
+
+        def _open(index: int, _merged: list = merged) -> None:
+            kind, record = _merged[index]
+            if kind == "trade":
+                RecordDetailDialog(
+                    self.page, "Activity detail", trade_detail_sections(record)
+                ).show()
+            else:
+                RecordDetailDialog(
+                    self.page, "Transaction detail", transaction_detail_sections(record)
+                ).show()
 
         # Wrap the table so the transaction list scrolls independently within
         # the panel (the header + search stay pinned above it). Hover a row for
@@ -871,7 +1015,12 @@ class TransactionsPanel(ft.Container):
                     rows=rows,
                     empty_message="No transactions",
                     on_row_click=_open,
-                    row_tooltips=[transaction_tooltip(txn) for txn in items],
+                    row_tooltips=[
+                        trade_tooltip(record)
+                        if kind == "trade"
+                        else transaction_tooltip(record)
+                        for kind, record in merged
+                    ],
                 )
             ],
             scroll=ft.ScrollMode.AUTO,
@@ -1001,10 +1150,12 @@ class TransactionsPanel(ft.Container):
         )
 
         async def _cancel() -> None:
-            self.page.close(dialog)
+            dialog.open = False
+            self.page.update()
 
         async def _save() -> None:
-            self.page.close(dialog)
+            dialog.open = False
+            self.page.update()
             new_name = value["name"]
             if new_name and new_name != account.get("name"):
                 await self._do_rename(account["id"], new_name)
@@ -1252,23 +1403,26 @@ class OverviewTab(ft.Container):
             self._body.update()
 
 
-# Connection status -> (display label, colour).
-_STATUS_STYLE: dict[str, tuple[str, str]] = {
-    "healthy": ("Connected", Theme.Colors.SUCCESS),
-    "loading": ("Syncing", Theme.Colors.WARNING),
-    "login_required": ("Login required", Theme.Colors.WARNING),
-    "pending_expiration": ("Expiring soon", Theme.Colors.WARNING),
-    "pending_disconnect": ("Disconnecting", Theme.Colors.WARNING),
-    "consent_expired": ("Consent expired", Theme.Colors.ERROR),
-    "revoked": ("Disconnected", Theme.Colors.ERROR),
-    "error": ("Error", Theme.Colors.ERROR),
-    "manual": ("Manual", Theme.Colors.TEXT_SECONDARY),
+# Connection status -> (display label, severity). Severity drives the shared
+# StatusTag dot styling, so colors stay single-sourced in the theme instead
+# of being re-picked per feature.
+_STATUS_STYLE: dict[str, tuple[str, ComponentStatusType]] = {
+    "healthy": ("Connected", ComponentStatusType.HEALTHY),
+    "loading": ("Syncing", ComponentStatusType.WARNING),
+    "login_required": ("Login required", ComponentStatusType.WARNING),
+    "pending_expiration": ("Expiring soon", ComponentStatusType.WARNING),
+    "pending_disconnect": ("Disconnecting", ComponentStatusType.WARNING),
+    "consent_expired": ("Consent expired", ComponentStatusType.UNHEALTHY),
+    "revoked": ("Disconnected", ComponentStatusType.UNHEALTHY),
+    "error": ("Error", ComponentStatusType.UNHEALTHY),
+    "manual": ("Manual", ComponentStatusType.INFO),
 }
 
 
-def _status_style(status: str) -> tuple[str, str]:
+def _status_style(status: str) -> tuple[str, ComponentStatusType]:
     return _STATUS_STYLE.get(
-        status, (status.replace("_", " ").title(), Theme.Colors.TEXT_SECONDARY)
+        status,
+        (status.replace("_", " ").title(), ComponentStatusType.INFO),
     )
 
 
@@ -1281,13 +1435,10 @@ def _connection_title(conn: dict) -> str:
 
 
 # Connection cards lay out in a wrapping grid so account rows stay a comfortable
-# ledger width instead of stretching across the whole (1600px) modal.
-_CONNECTION_CARD_WIDTH = 680
-
 
 # Plaid sandbox test credentials (public, from Plaid's sandbox docs). Surfaced
-# in the Connections tab only when PLAID_ENV is "sandbox", so you know what to
-# type into Plaid's hosted connect screen while testing.
+# inside the connect-a-bank flow when PLAID_ENV is "sandbox" - handed over at
+# the moment they get typed into Plaid's hosted connect screen.
 _PLAID_SANDBOX_CREDENTIALS: tuple[tuple[str, str], ...] = (
     ("Username", "user_good"),
     ("Password", "pass_good"),
@@ -1297,78 +1448,124 @@ _PLAID_SANDBOX_CREDENTIALS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _sandbox_credentials_card(page: ft.Page) -> ft.Control:
-    """Read-only helper panel: Plaid's sandbox test credentials, each with a
-    copy button. Only shown when the connection is running in sandbox mode."""
+class ConnectionCard(ft.Container):
+    """Collapsible card for the Connections grid.
 
-    def _copy(value: str):
-        def handler(_e: ft.ControlEvent) -> None:
-            page.set_clipboard(value)
-            SuccessSnackBar("Copied to clipboard").launch(page)
+    One anatomy for everything in the grid — provider connections, the
+    manual/imported bucket, and the Plaid sandbox helper: a header row
+    (expand arrow + bold title + caption subtitle) that toggles the body,
+    an optional ``Tag`` in the status slot, an optional trailing action
+    control, and a ``DataTable`` body.
+    """
 
-        return handler
-
-    rows: list[ft.Control] = [
-        ft.Row(
+    def __init__(
+        self,
+        *,
+        title: str,
+        subtitle: str | None = None,
+        tag: ft.Control | None = None,
+        action: ft.Control | None = None,
+        columns: list[DataTableColumn],
+        rows: list[list[ft.Control]],
+        empty_message: str,
+        on_row_click: Callable[[int], None] | None = None,
+        row_tooltips: list[str] | None = None,
+        expanded: bool = False,
+    ) -> None:
+        super().__init__()
+        self._arrow = ExpandArrow(expanded=expanded)
+        self._table = ft.Container(
+            content=DataTable(
+                columns=columns,
+                rows=rows,
+                empty_message=empty_message,
+                on_row_click=on_row_click,
+                row_tooltips=row_tooltips,
+            ),
+            visible=expanded,
+        )
+        title_col = ft.Column(
             [
-                ft.Text(
-                    label,
-                    size=Theme.Typography.CAPTION,
-                    color=Theme.Colors.TEXT_SECONDARY,
-                    width=120,
+                PrimaryText(
+                    title,
+                    size=Theme.Typography.BODY,
+                    weight=ft.FontWeight.W_600,
                 ),
-                ft.Text(
-                    value,
-                    size=Theme.Typography.BODY_SMALL,
-                    color=Theme.Colors.TEXT_PRIMARY,
-                    font_family="monospace",
-                    selectable=True,
-                    expand=True,
+                SecondaryText(subtitle or "", size=Theme.Typography.CAPTION),
+            ],
+            spacing=2,
+            expand=True,
+        )
+        header_bits: list[ft.Control] = [
+            ft.Container(
+                content=ft.Row(
+                    [self._arrow, title_col],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=Theme.Spacing.XS,
                 ),
-                ft.IconButton(
-                    icon=ft.Icons.COPY,
-                    icon_size=14,
-                    icon_color=Theme.Colors.TEXT_SECONDARY,
-                    tooltip=f"Copy {label.lower()}",
-                    on_click=_copy(value),
-                ),
+                on_click=self._toggle,
+                ink=True,
+                expand=True,
+                border_radius=Theme.Components.BUTTON_RADIUS,
+            )
+        ]
+        if tag is not None:
+            header_bits.append(tag)
+        if action is not None:
+            header_bits.append(action)
+        elif tag is not None:
+            # Reserve the action (kebab) slot so tags align in a column
+            # across cards that do and don't carry an action.
+            header_bits.append(ft.Container(width=40))
+        self.content = ft.Column(
+            [
+                ft.Row(header_bits, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                self._table,
             ],
             spacing=Theme.Spacing.SM,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
-        for label, value in _PLAID_SANDBOX_CREDENTIALS
-    ]
-    return ft.Container(
-        content=ft.Column(
-            [
-                ft.Row(
-                    [
-                        ft.Text(
-                            "Sandbox test credentials",
-                            size=Theme.Typography.BODY,
-                            color=Theme.Colors.TEXT_PRIMARY,
-                            weight=ft.FontWeight.W_600,
-                            expand=True,
-                        ),
-                        Tag(text="SANDBOX", color=Theme.Colors.WARNING),
-                    ],
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                ft.Text(
-                    "Enter these in Plaid's connect screen. Sandbox only.",
-                    size=Theme.Typography.CAPTION,
-                    color=Theme.Colors.TEXT_SECONDARY,
-                ),
-                ft.Container(height=Theme.Spacing.XS),
-                *rows,
-            ],
-            spacing=Theme.Spacing.XS,
-        ),
-        width=_CONNECTION_CARD_WIDTH,
-        padding=ft.padding.all(Theme.Spacing.MD),
-        bgcolor=Theme.Colors.SURFACE_1,
-        border=ft.border.all(1, Theme.Colors.BORDER_SUBTLE),
-        border_radius=Theme.Components.CARD_RADIUS,
+        # Two fluid columns on wide viewports, one on narrow: the grid fills
+        # the tab's width, so header controls (Connect / refresh) sit over
+        # card content instead of dead space past a fixed-width grid.
+        self.col = {"sm": 12, "lg": 6}
+        self.padding = ft.padding.all(Theme.Spacing.MD)
+        self.bgcolor = Theme.Colors.SURFACE_1
+        self.border = ft.border.all(1, Theme.Colors.BORDER_SUBTLE)
+        self.border_radius = Theme.Components.CARD_RADIUS
+
+    def _toggle(self, _e: ft.ControlEvent) -> None:
+        self._arrow.toggle()
+        self._table.visible = self._arrow.expanded
+        self._arrow.update()
+        self._table.update()
+
+
+def _plaid_sandbox_card(page: ft.Page) -> ConnectionCard:
+    """The Plaid sandbox helper, composed from the same ``ConnectionCard``
+    as every provider card. Clicking a credential row copies its value."""
+
+    def _copy_row(index: int) -> None:
+        label, value = _PLAID_SANDBOX_CREDENTIALS[index]
+        page.set_clipboard(value)
+        SuccessSnackBar(f"{label} copied").launch(page)
+
+    return ConnectionCard(
+        title="Plaid",
+        subtitle="Test credentials for the connect screen  ·  click a row to copy",
+        tag=StatusTag(status=ComponentStatusType.WARNING, text="Sandbox"),
+        columns=[
+            DataTableColumn("Credential"),
+            DataTableColumn("Value", width=180, alignment="right"),
+        ],
+        rows=[
+            [TableNameText(label), TableCellText(value)]
+            for label, value in _PLAID_SANDBOX_CREDENTIALS
+        ],
+        empty_message="No credentials",
+        on_row_click=_copy_row,
+        row_tooltips=[
+            f"Copy {label.lower()}" for label, _ in _PLAID_SANDBOX_CREDENTIALS
+        ],
     )
 
 
@@ -1387,21 +1584,32 @@ class ConnectionsTab(ft.Container):
         self._body = ft.Column(
             spacing=Theme.Spacing.MD, scroll=ft.ScrollMode.AUTO, expand=True
         )
+        connect = _build_connect_menu(
+            lambda e: e.page.run_task(self._connect_bank),
+            lambda e: e.page.run_task(self._connect_brokerage),
+        )
         self.content = ft.Column(
             [
                 _refresh_row(
                     lambda e: e.page.run_task(self._load),
                     "Refresh connections",
+                    leading=[connect] if connect is not None else None,
                 ),
                 self._body,
             ],
-            spacing=0,
+            spacing=Theme.Spacing.MD,
             expand=True,
         )
 
     def did_mount(self) -> None:
         if self.page:
             self.page.run_task(self._load)
+
+    async def _connect_bank(self) -> None:
+        await _connect_bank_flow(self.page, self._load)
+
+    async def _connect_brokerage(self) -> None:
+        await _connect_brokerage_flow(self.page, self._load)
 
     def _card(
         self,
@@ -1415,96 +1623,45 @@ class ConnectionsTab(ft.Container):
         # Aligned columns (Account / Type / Balance) — same DataTable the
         # Accounts tab uses for transactions, so the type reads as a quiet
         # column instead of a loud per-row pill.
-        columns = [
-            DataTableColumn("Account"),
-            DataTableColumn("Type", width=120),
-            DataTableColumn("Balance", width=130, alignment="right"),
-        ]
-        rows = [
-            [
-                TableNameText(account.get("name", "")),
-                TableCellText(
-                    (account.get("account_type") or "").replace("_", " ").title()
-                ),
-                _amount_cell(_account_display_balance(account)),
-            ]
-            for account in accounts
-        ]
-        # Collapsible: the account table lives in a container the header toggles.
-        arrow = ExpandArrow(expanded=True)
-        table = ft.Container(
-            content=DataTable(
-                columns=columns, rows=rows, empty_message="No accounts."
-            ),
-            visible=True,
-        )
-
-        def _toggle(_e: ft.ControlEvent) -> None:
-            arrow.toggle()
-            table.visible = arrow.expanded
-            arrow.update()
-            table.update()
-
-        title_col = ft.Column(
-            [
-                ft.Text(
-                    title,
-                    size=Theme.Typography.BODY,
-                    color=Theme.Colors.TEXT_PRIMARY,
-                    weight=ft.FontWeight.W_600,
-                ),
-                ft.Text(
-                    subtitle or "",
-                    size=Theme.Typography.CAPTION,
-                    color=Theme.Colors.TEXT_SECONDARY,
-                ),
-            ],
-            spacing=2,
-            expand=True,
-        )
-        # Clicking the arrow/title toggles; the Disconnect button stays separate.
-        header_bits: list[ft.Control] = [
-            ft.Container(
-                content=ft.Row(
-                    [arrow, title_col],
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=Theme.Spacing.XS,
-                ),
-                on_click=_toggle,
-                ink=True,
-                expand=True,
-                border_radius=Theme.Components.BUTTON_RADIUS,
-            )
-        ]
+        tag = None
         if status is not None:
-            label, color = _status_style(status)
-            header_bits.append(Tag(text=label, color=color))
+            label, severity = _status_style(status)
+            # Same dot indicator the rest of the Overseer uses for status.
+            tag = StatusTag(status=severity, text=label)
+        action = None
         if on_disconnect is not None:
-            header_bits.append(
-                PulseButton(
-                    on_click_callable=on_disconnect,
-                    text="Disconnect",
-                    variant="stop",
-                    compact=True,
-                )
-            )
-
-        return ft.Container(
-            content=ft.Column(
+            # Kebab menu keeps destructive actions out of the resting view.
+            action = ActionMenu(
                 [
-                    ft.Row(
-                        header_bits,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ActionMenuItem(
+                        "Disconnect",
+                        ft.Icons.LINK_OFF,
+                        lambda e: e.page.run_task(on_disconnect),
+                        destructive=True,
+                    )
+                ]
+            )
+        return ConnectionCard(
+            title=title,
+            subtitle=subtitle,
+            tag=tag,
+            action=action,
+            columns=[
+                DataTableColumn("Account"),
+                DataTableColumn("Type", width=120),
+                DataTableColumn("Balance", width=130, alignment="right"),
+            ],
+            rows=[
+                [
+                    TableNameText(account.get("name", "")),
+                    TableCellText(
+                        (account.get("account_type") or "").replace("_", " ").title()
                     ),
-                    table,
-                ],
-                spacing=Theme.Spacing.SM,
-            ),
-            width=_CONNECTION_CARD_WIDTH,
-            padding=ft.padding.all(Theme.Spacing.MD),
-            bgcolor=Theme.Colors.SURFACE_1,
-            border=ft.border.all(1, Theme.Colors.BORDER_SUBTLE),
-            border_radius=Theme.Components.CARD_RADIUS,
+                    _amount_cell(_account_display_balance(account)),
+                ]
+                for account in accounts
+            ],
+            empty_message="No accounts.",
         )
 
     async def _load(self) -> None:
@@ -1555,19 +1712,20 @@ class ConnectionsTab(ft.Container):
                 )
             )
 
-        self._body.controls.clear()
-        # Sandbox helper: show Plaid's test credentials when connecting isn't
-        # against a real institution.
+        # Sandbox helper rides the same grid as the provider cards, styled
+        # identically, so the Plaid test credentials are always reachable
+        # while a hosted connect screen is asking for them.
         if (
             getattr(settings, "PLAID_CLIENT_ID", None)
             and getattr(settings, "PLAID_ENV", "sandbox") == "sandbox"
         ):
-            self._body.controls.append(_sandbox_credentials_card(self.page))
+            cards.append(_plaid_sandbox_card(self.page))
+
+        self._body.controls.clear()
         if cards:
             self._body.controls.append(
-                ft.Row(
+                ft.ResponsiveRow(
                     cards,
-                    wrap=True,
                     spacing=Theme.Spacing.MD,
                     run_spacing=Theme.Spacing.MD,
                     vertical_alignment=ft.CrossAxisAlignment.START,

@@ -680,7 +680,7 @@ class HoldingCreate(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Provider connectivity (Plaid)
+# Provider connectivity (Plaid + SnapTrade)
 # ---------------------------------------------------------------------------
 class LinkTokenResponse(BaseModel):
     """A Plaid Link token the frontend hands to Plaid Link."""
@@ -725,3 +725,11 @@ class HostedLinkCompleteRequest(BaseModel):
     """POST body for /plaid/hosted-link/complete."""
 
     link_token: str
+
+
+class SnapTradeConnectResponse(BaseModel):
+    """A SnapTrade connection-portal session — open the URL in a new tab
+    (expires in ~5 minutes) and poll ``/snaptrade/connect/complete``."""
+
+    redirect_uri: str
+    connection_id: int

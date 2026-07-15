@@ -53,6 +53,121 @@ class TestSecurities:
         assert first.ticker == "AAPL"  # normalized to upper
 
 
+class TestProviderSecurityResolution:
+    @pytest.mark.asyncio
+    async def test_same_provider_id_updates_in_place(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        first = await svc.upsert_provider_security(
+            provider="plaid",
+            provider_security_id="plaid-vti",
+            ticker="VTI",
+            name="Vanguard Total Stock Market ETF",
+            figi="BBG000HT88C8",
+            close_price=25_000,
+        )
+        again = await svc.upsert_provider_security(
+            provider="plaid",
+            provider_security_id="plaid-vti",
+            ticker="VTI",
+            name="Vanguard Total Stock Market",
+            close_price=25_100,
+        )
+        assert again.id == first.id
+        assert again.name == "Vanguard Total Stock Market"
+        assert again.close_price == 25_100
+        # A sync that omits the FIGI must not null out the merge key.
+        assert again.figi == "BBG000HT88C8"
+
+    @pytest.mark.asyncio
+    async def test_partial_payload_does_not_erase_catalog_fields(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """An activities row often carries only the provider security id
+        (no pricing, sometimes no descriptives). Re-upserting from such a
+        partial payload must not erase what a fuller sync already stored."""
+        svc = FinanceService(async_db_session)
+        full = await svc.upsert_provider_security(
+            provider="snaptrade",
+            provider_security_id="sym-aapl",
+            ticker="AAPL",
+            name="Apple Inc.",
+            security_type="cs",
+            close_price=15_000,
+        )
+        partial = await svc.upsert_provider_security(
+            provider="snaptrade",
+            provider_security_id="sym-aapl",
+        )
+        assert partial.id == full.id
+        assert partial.ticker == "AAPL"
+        assert partial.name == "Apple Inc."
+        assert partial.security_type == "cs"
+        assert partial.close_price == 15_000
+
+    @pytest.mark.asyncio
+    async def test_figi_merges_across_providers(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The FIN-25 contract: the same instrument reported by two
+        aggregators resolves to ONE catalog row, keyed by FIGI."""
+        svc = FinanceService(async_db_session)
+        plaid_row = await svc.upsert_provider_security(
+            provider="plaid",
+            provider_security_id="plaid-aapl",
+            ticker="AAPL",
+            name="Apple Inc.",
+            figi="BBG000B9XRY4",
+        )
+        snaptrade_row = await svc.upsert_provider_security(
+            provider="snaptrade",
+            provider_security_id="c5f5b1b8-0000-4444-8888-123456789abc",
+            ticker="AAPL",
+            figi="BBG000B9XRY4",
+            cusip="037833100",
+        )
+        assert snaptrade_row.id == plaid_row.id
+        # First cataloger keeps the row identity; the newcomer fills gaps.
+        assert snaptrade_row.provider == "plaid"
+        assert snaptrade_row.provider_security_id == "plaid-aapl"
+        assert snaptrade_row.cusip == "037833100"
+        assert snaptrade_row.name == "Apple Inc."  # not clobbered by None
+
+    @pytest.mark.asyncio
+    async def test_cusip_fallback_when_figi_missing(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        first = await svc.upsert_provider_security(
+            provider="plaid",
+            provider_security_id="plaid-bond",
+            name="Some Corporate Bond",
+            cusip="12345678X",
+        )
+        merged = await svc.upsert_provider_security(
+            provider="snaptrade",
+            provider_security_id="st-bond",
+            cusip="12345678X",
+        )
+        assert merged.id == first.id
+
+    @pytest.mark.asyncio
+    async def test_no_identifiers_stays_provider_scoped(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Without a standard identifier there is nothing safe to merge on:
+        two providers get two rows."""
+        svc = FinanceService(async_db_session)
+        plaid_row = await svc.upsert_provider_security(
+            provider="plaid", provider_security_id="plaid-mystery"
+        )
+        snaptrade_row = await svc.upsert_provider_security(
+            provider="snaptrade", provider_security_id="st-mystery"
+        )
+        assert snaptrade_row.id != plaid_row.id
+
+
 class TestHoldings:
     @pytest.mark.asyncio
     async def test_upsert_creates_and_syncs_account_balance(

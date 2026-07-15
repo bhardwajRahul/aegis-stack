@@ -1,15 +1,28 @@
-"""Provider connection sync: turn a Plaid Item into finance accounts + txns.
+"""Provider connection sync: turn provider links into finance accounts + txns.
 
-``create_plaid_connection`` stores an exchanged access token (AES-GCM encrypted)
-as a ``FinanceConnection``. ``sync_plaid_connection`` pulls the item's accounts
-(upserting ``FinanceAccount`` rows keyed by Plaid ``account_id``) and its
-transactions via the cursor-based ``transactions/sync`` (LANE-1 dedup on the
-Plaid ``transaction_id``). Writes but does not commit — the caller owns the txn.
+Plaid: ``create_plaid_connection`` stores an exchanged access token (AES-GCM
+encrypted) as a ``FinanceConnection``. ``sync_plaid_connection`` pulls the
+item's accounts (upserting ``FinanceAccount`` rows keyed by Plaid
+``account_id``) and its transactions via the cursor-based ``transactions/sync``
+(LANE-1 dedup on the Plaid ``transaction_id``).
+
+SnapTrade: ``start_snaptrade_connect`` registers/reuses the owner's SnapTrade
+user (its ``user_secret`` — the actual credential — is AES-GCM encrypted per
+connection row) and returns the connection-portal URL;
+``complete_snaptrade_connect`` adopts new brokerage authorizations into
+connection rows; ``sync_snaptrade_connection`` polls accounts, positions, and
+date-windowed activities into the same tables through the same shared upsert
+helpers (``upsert_provider_security`` merges cross-provider duplicates by
+FIGI/CUSIP/ISIN).
+
+Writes but does not commit — the caller owns the transaction.
 """
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -18,19 +31,28 @@ import httpx
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from cryptography.fernet import InvalidToken
+
 from app.core.encryption import decrypt_secret, encrypt_secret
 from app.services.finance.constants import Provider
 from app.services.finance.finance_service import FinanceService
 from app.services.finance.models import (
     FinanceAccount,
     FinanceConnection,
-    FinanceSecurity,
     FinanceTransaction,
     FinanceWebhookEvent,
 )
 from app.services.finance.providers.plaid import PlaidClient, PlaidError
+from app.services.finance.providers.snaptrade import SnapTradeClient, SnapTradeError
+
+logger = logging.getLogger(__name__)
 
 _ACCESS_TOKEN_CONTEXT = "finance.plaid.access_token"
+_SNAPTRADE_SECRET_CONTEXT = "finance.snaptrade.user_secret"
+# SnapTrade error code 1010: a user with this userId already exists. The only
+# condition under which the destructive delete + re-register recovery in
+# start_snaptrade_connect may run.
+_SNAPTRADE_USER_EXISTS_CODE = "1010"
 
 # Plaid ``type`` -> (account_type, classification). Depository subtypes refine
 # checking vs savings below.
@@ -358,41 +380,28 @@ async def _remove_transactions(db: AsyncSession, removed: list[dict[str, Any]]) 
 
 
 async def _upsert_securities(
-    db: AsyncSession,
     service: FinanceService,
     plaid_securities: list[dict[str, Any]],
 ) -> dict[str, int]:
     """Upsert catalog securities keyed by Plaid ``security_id`` (some have no
-    ticker, so the provider id is the stable key). Returns {plaid_id: our_id}."""
+    ticker, so the provider id is the stable key); FIGI/CUSIP/ISIN merge the
+    same instrument across providers. Returns {plaid_id: our_id}."""
     mapping: dict[str, int] = {}
     for sec in plaid_securities:
         plaid_id = sec["security_id"]
-        currency = (sec.get("iso_currency_code") or "usd").lower()
-        await service.get_or_create_currency(currency)
-        security = (
-            await db.exec(
-                select(FinanceSecurity).where(
-                    FinanceSecurity.provider == Provider.PLAID,
-                    FinanceSecurity.provider_security_id == plaid_id,
-                )
-            )
-        ).first()
-        if security is None:
-            security = FinanceSecurity(
-                provider=Provider.PLAID, provider_security_id=plaid_id
-            )
         close = sec.get("close_price")
-        security.ticker = sec.get("ticker_symbol")
-        security.name = sec.get("name")
-        security.security_type = sec.get("type")
-        security.cusip = sec.get("cusip")
-        security.isin = sec.get("isin")
-        security.figi = sec.get("figi")
-        security.currency = currency
-        security.close_price = round(close * 100) if close is not None else None
-        security.price_scale = 2
-        db.add(security)
-        await db.flush()
+        security = await service.upsert_provider_security(
+            provider=Provider.PLAID,
+            provider_security_id=plaid_id,
+            ticker=sec.get("ticker_symbol"),
+            name=sec.get("name"),
+            security_type=sec.get("type"),
+            cusip=sec.get("cusip"),
+            isin=sec.get("isin"),
+            figi=sec.get("figi"),
+            currency=(sec.get("iso_currency_code") or "usd").lower(),
+            close_price=round(close * 100) if close is not None else None,
+        )
         mapping[plaid_id] = security.id
     return mapping
 
@@ -577,7 +586,7 @@ async def sync_plaid_connection(
     except PlaidError:
         plaid_holdings, plaid_securities = [], []
     if plaid_holdings:
-        security_by_plaid_id = await _upsert_securities(db, service, plaid_securities)
+        security_by_plaid_id = await _upsert_securities(service, plaid_securities)
         result.holdings = await _apply_holdings(
             db,
             service,
@@ -611,9 +620,7 @@ async def sync_plaid_connection(
     except PlaidError:
         inv_txns, inv_securities = [], []
     if inv_txns:
-        trade_security_by_plaid_id = await _upsert_securities(
-            db, service, inv_securities
-        )
+        trade_security_by_plaid_id = await _upsert_securities(service, inv_securities)
         result.trades = await _apply_trades(
             db,
             service,
@@ -653,17 +660,29 @@ async def sync_plaid_connection(
     return result
 
 
+async def list_provider_connections(
+    db: AsyncSession,
+    *,
+    provider: str | None = None,
+    owner_user_id: int | None = None,
+) -> list[FinanceConnection]:
+    """Active (non-deleted) provider connections for an owner, optionally
+    narrowed to one provider."""
+    query = select(FinanceConnection).where(FinanceConnection.deleted_at.is_(None))
+    if provider is not None:
+        query = query.where(FinanceConnection.provider == provider)
+    if owner_user_id is not None:
+        query = query.where(FinanceConnection.owner_user_id == owner_user_id)
+    return list((await db.exec(query)).all())
+
+
 async def list_plaid_connections(
     db: AsyncSession, *, owner_user_id: int | None = None
 ) -> list[FinanceConnection]:
     """Active (non-deleted) Plaid connections for an owner."""
-    query = select(FinanceConnection).where(
-        FinanceConnection.provider == Provider.PLAID,
-        FinanceConnection.deleted_at.is_(None),
+    return await list_provider_connections(
+        db, provider=Provider.PLAID, owner_user_id=owner_user_id
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceConnection.owner_user_id == owner_user_id)
-    return list((await db.exec(query)).all())
 
 
 async def get_connection(
@@ -685,30 +704,99 @@ async def disconnect_connection(
     *,
     owner_user_id: int | None = None,
     client: PlaidClient | None = None,
-) -> bool:
-    """Disconnect a connection: revoke the Item at Plaid (best-effort), then
-    soft-delete the connection and every account under it. Transactions/history
-    rows are kept. Returns False if the connection doesn't exist for this owner.
+    snaptrade_client: SnapTradeClient | None = None,
+) -> tuple[bool, Callable[[], Awaitable[None]] | None]:
+    """Disconnect a connection: soft-delete it and every account under it
+    right away, and return a best-effort provider revoke for the caller to
+    run AFTER responding (FastAPI ``BackgroundTasks``). The provider round
+    trip is the slow part of a disconnect; keeping it out of the request
+    path makes the UI feel instant. Transactions/history rows are kept.
 
-    The remote revoke is best-effort: if Plaid is unreachable or the token is
-    already invalid, we still tear down locally so a stuck connection can always
-    be removed.
+    Returns ``(removed, revoke)``: ``removed`` is False when the connection
+    doesn't exist for this owner; ``revoke`` is None when there is nothing
+    to revoke remotely. The revoke callable never raises — provider errors
+    (already-invalid credential, unreachable API) are logged and swallowed,
+    since the local teardown has already happened.
     """
     connection = await get_connection(db, connection_id, owner_user_id=owner_user_id)
     if connection is None:
-        return False
+        return False, None
 
-    if connection.access_token_encrypted:
+    revoke: Callable[[], Awaitable[None]] | None = None
+    if connection.provider == Provider.SNAPTRADE:
+        if connection.access_token_encrypted and connection.provider_item_id:
+            # A corrupted/rekeyed ciphertext must never block the local
+            # teardown - there is simply nothing usable to revoke remotely.
+            try:
+                user_secret = decrypt_secret(
+                    connection.access_token_encrypted,
+                    context=_SNAPTRADE_SECRET_CONTEXT,
+                )
+            except InvalidToken as exc:
+                logger.warning(
+                    "Stored SnapTrade secret for connection %s is "
+                    "undecryptable; skipping provider revoke: %s",
+                    connection.id,
+                    exc,
+                )
+                user_secret = None
+            if user_secret is not None:
+                secret = user_secret
+                authorization_id = connection.provider_item_id
+                conn_id = connection.id
+                conn_owner_id = connection.owner_user_id
+
+                async def _revoke_snaptrade() -> None:
+                    try:
+                        st_client = snaptrade_client or SnapTradeClient()
+                        await st_client.remove_authorization(
+                            ""
+                            if st_client.is_personal
+                            else _snaptrade_user_id(conn_owner_id),
+                            secret,
+                            authorization_id,
+                        )
+                    except (SnapTradeError, httpx.HTTPError) as exc:
+                        logger.warning(
+                            "SnapTrade revoke failed for connection %s (already "
+                            "torn down locally): %s",
+                            conn_id,
+                            exc,
+                        )
+
+                revoke = _revoke_snaptrade
+    elif connection.access_token_encrypted:
         try:
             access_token = decrypt_secret(
                 connection.access_token_encrypted, context=_ACCESS_TOKEN_CONTEXT
             )
-            await (client or PlaidClient()).remove_item(access_token)
-        except (PlaidError, httpx.HTTPError):
-            # already-invalid token (PlaidError) or Plaid unreachable
-            # (timeout/connect error from httpx) — tear down locally anyway so a
-            # stuck connection can always be removed.
-            pass
+        except InvalidToken as exc:
+            logger.warning(
+                "Stored Plaid token for connection %s is undecryptable; "
+                "skipping provider revoke: %s",
+                connection.id,
+                exc,
+            )
+            access_token = None
+        if access_token is not None:
+            token = access_token
+            plaid_conn_id = connection.id
+
+            async def _revoke_plaid() -> None:
+                try:
+                    await (client or PlaidClient()).remove_item(token)
+                except (PlaidError, httpx.HTTPError) as exc:
+                    # already-invalid token (PlaidError) or Plaid unreachable
+                    # (timeout/connect error from httpx) — the local teardown
+                    # already happened, so just log it.
+                    logger.warning(
+                        "Plaid revoke failed for connection %s (already torn "
+                        "down locally): %s",
+                        plaid_conn_id,
+                        exc,
+                    )
+
+            revoke = _revoke_plaid
 
     now = _utcnow()
     accounts = (
@@ -729,7 +817,7 @@ async def disconnect_connection(
     connection.access_token_encrypted = None
     db.add(connection)
     await db.flush()
-    return True
+    return True, revoke
 
 
 async def _recompute_net_worth(
@@ -759,12 +847,36 @@ async def sync_owner_connections(
     *,
     owner_user_id: int | None = None,
     client: PlaidClient | None = None,
+    snaptrade_client: SnapTradeClient | None = None,
 ) -> list[SyncResult]:
-    """Sync every Plaid connection for an owner; returns one result each."""
-    client = client or PlaidClient()
+    """Sync every provider connection for an owner; returns one result each.
+
+    Dispatches on ``connection.provider``. Provider clients are only
+    constructed when a connection of that provider exists, so a
+    single-provider deployment never touches the other's credentials/SDK.
+    """
     results: list[SyncResult] = []
-    for connection in await list_plaid_connections(db, owner_user_id=owner_user_id):
-        results.append(await sync_plaid_connection(db, connection, client=client))
+    plaid_connections = await list_plaid_connections(db, owner_user_id=owner_user_id)
+    if plaid_connections:
+        client = client or PlaidClient()
+        for connection in plaid_connections:
+            results.append(await sync_plaid_connection(db, connection, client=client))
+    snaptrade_connections = [
+        c
+        for c in await list_provider_connections(
+            db, provider=Provider.SNAPTRADE, owner_user_id=owner_user_id
+        )
+        # Rows still waiting on the portal (no authorization yet) can't sync.
+        if c.provider_item_id is not None
+    ]
+    if snaptrade_connections:
+        snaptrade_client = snaptrade_client or SnapTradeClient()
+        for connection in snaptrade_connections:
+            results.append(
+                await sync_snaptrade_connection(
+                    db, connection, client=snaptrade_client
+                )
+            )
     await _recompute_net_worth(db, owner_user_id, results)
     return results
 
@@ -841,3 +953,491 @@ async def process_plaid_webhook(
     event.status = "processed"
     await _recompute_net_worth(db, connection.owner_user_id, [result])
     return "synced"
+
+
+# --------------------------------------------------------------------------- #
+# SnapTrade (brokerage authorizations — the Fidelity path)
+# --------------------------------------------------------------------------- #
+
+# First sync pulls this trailing window of activities; SnapTrade has no cursor,
+# so later syncs re-window from the last pull (minus a small overlap for
+# late-posting rows) and dedup on the activity id.
+_SNAPTRADE_LOOKBACK_DAYS = 730
+_SNAPTRADE_ACTIVITY_OVERLAP_DAYS = 7
+_SNAPTRADE_ACTIVITY_PAGE = 500
+
+# SnapTrade activity ``type`` -> canonical finance_trade type. TRANSFER is
+# resolved by cash direction below; anything unknown degrades to "other" so a
+# new provider type never breaks a sync.
+_SNAPTRADE_TRADE_TYPES: dict[str, str] = {
+    "BUY": "buy",
+    "SELL": "sell",
+    "DIVIDEND": "dividend",
+    "STOCK_DIVIDEND": "dividend",
+    "REI": "reinvest",
+    "INTEREST": "interest",
+    "FEE": "fee",
+    "TAX": "tax",
+    "CONTRIBUTION": "deposit",
+    "WITHDRAWAL": "withdrawal",
+    "SPLIT": "split",
+}
+
+
+def _snaptrade_user_id(owner_user_id: int | None) -> str:
+    """The immutable SnapTrade ``userId`` for an app user. Deterministic so it
+    never needs storing; SnapTrade scopes user ids to the partner app."""
+    return "user-standalone" if owner_user_id is None else f"user-{owner_user_id}"
+
+
+def _map_snaptrade_trade_type(raw_type: str | None, amount: int | None) -> str:
+    kind = (raw_type or "").upper()
+    if kind == "TRANSFER":
+        return "transfer_in" if (amount or 0) >= 0 else "transfer_out"
+    return _SNAPTRADE_TRADE_TYPES.get(kind, "other")
+
+
+def _snaptrade_symbol_fields(symbol: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Flatten a SnapTrade symbol payload to upsert_provider_security kwargs.
+
+    Positions nest it as ``position.symbol.symbol`` (a UniversalSymbol);
+    activities carry the UniversalSymbol directly. Both are handled here.
+    """
+    if not symbol:
+        return None
+    inner = symbol.get("symbol")
+    if isinstance(inner, dict):  # PositionSymbol wrapper -> UniversalSymbol
+        symbol = inner
+    provider_security_id = symbol.get("id")
+    if not provider_security_id:
+        return None
+    security_type = symbol.get("type") or {}
+    currency = symbol.get("currency") or {}
+    return {
+        "provider_security_id": str(provider_security_id),
+        "ticker": symbol.get("raw_symbol") or symbol.get("symbol"),
+        "name": symbol.get("description"),
+        "security_type": security_type.get("code")
+        if isinstance(security_type, dict)
+        else security_type,
+        "figi": symbol.get("figi_code"),
+        "currency": (
+            currency.get("code", "usd") if isinstance(currency, dict) else currency
+        ).lower(),
+    }
+
+
+async def _snaptrade_user_secret(
+    db: AsyncSession, *, owner_user_id: int | None
+) -> str | None:
+    """The owner's SnapTrade ``userSecret``, from any of their connection rows
+    (every row stores the same user-level secret)."""
+    for connection in await list_provider_connections(
+        db, provider=Provider.SNAPTRADE, owner_user_id=owner_user_id
+    ):
+        if connection.access_token_encrypted:
+            return decrypt_secret(
+                connection.access_token_encrypted, context=_SNAPTRADE_SECRET_CONTEXT
+            )
+    return None
+
+
+async def start_snaptrade_connect(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None,
+    broker: str | None = None,
+    custom_redirect: str | None = None,
+    client: SnapTradeClient | None = None,
+) -> tuple[FinanceConnection, str]:
+    """Begin a SnapTrade connect: ensure the owner's SnapTrade user exists,
+    create a pending (``loading``) connection row holding the encrypted user
+    secret, and return it with the connection-portal URL (expires in ~5 min).
+
+    ``complete_snaptrade_connect`` later adopts the authorization the user
+    produced in the portal into this row.
+    """
+    client = client or SnapTradeClient()
+    if client.is_personal:
+        # Personal (PERS-) keys: the key IS the user. No registration, and
+        # data calls are signed with an empty userId/userSecret pair.
+        user_id, user_secret = "", ""
+    else:
+        user_id = _snaptrade_user_id(owner_user_id)
+        stored = await _snaptrade_user_secret(db, owner_user_id=owner_user_id)
+        if stored is not None:
+            user_secret = stored
+        else:
+            try:
+                user_secret = await client.register_user(user_id)
+            except SnapTradeError as exc:
+                # Delete + re-register mints a fresh secret when the user
+                # exists at SnapTrade but no local row holds it (all local
+                # rows were removed). Deleting a SnapTrade user revokes its
+                # existing authorizations, so this destructive recovery is
+                # gated on SnapTrade's specific "user already exists" code -
+                # transient failures (timeouts, 5xx, bad credentials) must
+                # surface instead.
+                if exc.error_code != _SNAPTRADE_USER_EXISTS_CODE:
+                    raise
+                logger.warning(
+                    "SnapTrade user %s exists with no stored secret; "
+                    "re-registering (revokes that user's prior authorizations)",
+                    user_id,
+                )
+                await client.delete_user(user_id)
+                user_secret = await client.register_user(user_id)
+    connection = FinanceConnection(
+        owner_user_id=owner_user_id,
+        provider=Provider.SNAPTRADE,
+        connection_type="aggregator_token",
+        environment="production",
+        access_token_encrypted=encrypt_secret(
+            user_secret, context=_SNAPTRADE_SECRET_CONTEXT
+        ),
+        status="loading",
+    )
+    db.add(connection)
+    await db.flush()
+    url = await client.login_url(
+        user_id, user_secret, broker=broker, custom_redirect=custom_redirect
+    )
+    return connection, url
+
+
+async def complete_snaptrade_connect(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None = None,
+    client: SnapTradeClient | None = None,
+) -> list[SyncResult]:
+    """Adopt any brokerage authorizations not yet tied to a connection row,
+    then sync them. Returns ``[]`` while the portal is still pending, so the
+    frontend can poll this until it comes back non-empty (the Hosted Link
+    pattern)."""
+    client = client or SnapTradeClient()
+    if client.is_personal:
+        user_id, user_secret = "", ""
+    else:
+        stored = await _snaptrade_user_secret(db, owner_user_id=owner_user_id)
+        if stored is None:
+            return []  # connect was never started
+        user_id, user_secret = _snaptrade_user_id(owner_user_id), stored
+
+    rows = await list_provider_connections(
+        db, provider=Provider.SNAPTRADE, owner_user_id=owner_user_id
+    )
+    known_authorizations = {r.provider_item_id for r in rows if r.provider_item_id}
+    pending = [r for r in rows if r.provider_item_id is None]
+
+    results: list[SyncResult] = []
+    for authorization in await client.list_authorizations(user_id, user_secret):
+        authorization_id = str(authorization.get("id") or "")
+        if not authorization_id or authorization_id in known_authorizations:
+            continue
+        connection = (
+            pending.pop(0)
+            if pending
+            else FinanceConnection(
+                owner_user_id=owner_user_id,
+                provider=Provider.SNAPTRADE,
+                connection_type="aggregator_token",
+                environment="production",
+                access_token_encrypted=encrypt_secret(
+                    user_secret, context=_SNAPTRADE_SECRET_CONTEXT
+                ),
+            )
+        )
+        connection.provider_item_id = authorization_id
+        brokerage = authorization.get("brokerage") or {}
+        connection.label = (
+            brokerage.get("display_name")
+            or brokerage.get("name")
+            or authorization.get("name")
+        )
+        connection.status = "healthy"
+        db.add(connection)
+        await db.flush()
+        results.append(await sync_snaptrade_connection(db, connection, client=client))
+    await _recompute_net_worth(db, owner_user_id, results)
+    return results
+
+
+async def _find_snaptrade_account(
+    db: AsyncSession,
+    connection: FinanceConnection,
+    *,
+    snaptrade_id: str,
+    name: str,
+    mask: str | None,
+) -> FinanceAccount | None:
+    """Match by the SnapTrade account id, else the re-link fallback (same
+    owner + name + mask) — a re-connected brokerage issues fresh account ids
+    but keeps the human identity."""
+    found = (
+        await db.exec(
+            select(FinanceAccount).where(
+                FinanceAccount.provider == Provider.SNAPTRADE,
+                FinanceAccount.provider_account_id == snaptrade_id,
+            )
+        )
+    ).first()
+    if found is not None:
+        return found
+    query = select(FinanceAccount).where(
+        FinanceAccount.provider == Provider.SNAPTRADE,
+        FinanceAccount.name == name,
+        FinanceAccount.deleted_at.is_(None),
+    )
+    query = query.where(
+        FinanceAccount.mask == mask
+        if mask is not None
+        else FinanceAccount.mask.is_(None)
+    )
+    if connection.owner_user_id is not None:
+        query = query.where(FinanceAccount.owner_user_id == connection.owner_user_id)
+    return (await db.exec(query)).first()
+
+
+async def _upsert_snaptrade_accounts(
+    db: AsyncSession,
+    service: FinanceService,
+    connection: FinanceConnection,
+    snaptrade_accounts: list[dict[str, Any]],
+) -> dict[str, int]:
+    """Upsert one FinanceAccount per SnapTrade account; return
+    {snaptrade_id: account_id}. SnapTrade accounts are brokerages (assets);
+    the account's ``balance.total`` is the provider-authoritative value."""
+    mapping: dict[str, int] = {}
+    for raw in snaptrade_accounts:
+        snaptrade_id = str(raw.get("id") or "")
+        if not snaptrade_id:
+            continue
+        name = raw.get("name") or raw.get("institution_name") or "Brokerage"
+        number = raw.get("number") or ""
+        mask = number[-4:] if number else None
+        total = (raw.get("balance") or {}).get("total") or {}
+        currency = (total.get("currency") or "usd").lower()
+        await service.get_or_create_currency(currency)
+        account = await _find_snaptrade_account(
+            db, connection, snaptrade_id=snaptrade_id, name=name, mask=mask
+        )
+        if account is None:
+            account = FinanceAccount(
+                owner_user_id=connection.owner_user_id,
+                provider=Provider.SNAPTRADE,
+                account_type="brokerage",
+                classification="asset",
+                name=name,
+                is_manual=False,
+            )
+        account.connection_id = connection.id
+        account.provider_account_id = snaptrade_id
+        account.currency = currency
+        account.name = name
+        account.mask = mask
+        account.current_balance = _to_cents(total.get("amount"))
+        account.balance_as_of = _utcnow()
+        account.deleted_at = None
+        db.add(account)
+        await db.flush()
+        mapping[snaptrade_id] = account.id
+    return mapping
+
+
+async def _apply_snaptrade_positions(
+    service: FinanceService,
+    positions: list[dict[str, Any]],
+    *,
+    account_id: int,
+    owner_user_id: int | None,
+) -> int:
+    """Positions -> securities (via the FIGI-first shared upsert) + dated
+    holdings. The account balance stays SnapTrade's ``balance.total``
+    (``sync_account_balance=False``), mirroring the Plaid path."""
+    count = 0
+    for position in positions:
+        fields = _snaptrade_symbol_fields(position.get("symbol"))
+        if fields is None:
+            continue
+        units = position.get("units")
+        if units is None:
+            continue
+        price = position.get("price")
+        price_cents = round(price * 100) if price is not None else None
+        security = await service.upsert_provider_security(
+            provider=Provider.SNAPTRADE,
+            close_price=price_cents,
+            **fields,
+        )
+        average_cost = position.get("average_purchase_price")
+        await service.upsert_holding(
+            owner_user_id=owner_user_id,
+            account_id=account_id,
+            security_id=security.id,
+            as_of_date=_utcnow().date(),
+            quantity_e8=round(units * 10**8),
+            price=price_cents,
+            cost_basis=(
+                round(average_cost * units * 100)
+                if average_cost is not None and units
+                else None
+            ),
+            currency=fields["currency"],
+            source=Provider.SNAPTRADE,
+            sync_account_balance=False,
+        )
+        count += 1
+    return count
+
+
+async def _apply_snaptrade_activities(
+    service: FinanceService,
+    activities: list[dict[str, Any]],
+    *,
+    account_id: int,
+    connection: FinanceConnection,
+) -> int:
+    """Activities -> finance_trade rows, deduped on the activity id.
+
+    SnapTrade signs ``amount`` positive for cash INTO the account (docs:
+    "sell, deposits, dividends ... positive; buy, withdrawals, fees ...
+    negative") — already this project's convention, so no negation here.
+    """
+    count = 0
+    for activity in activities:
+        external_id = activity.get("id")
+        if not external_id:
+            continue
+        raw_date = activity.get("trade_date") or activity.get("settlement_date")
+        if not raw_date:
+            continue
+        trade_date = date.fromisoformat(str(raw_date)[:10])
+        amount = activity.get("amount")
+        amount_cents = round(amount * 100) if amount is not None else 0
+        fields = _snaptrade_symbol_fields(activity.get("symbol"))
+        security_id = None
+        if fields is not None:
+            security = await service.upsert_provider_security(
+                provider=Provider.SNAPTRADE, **fields
+            )
+            security_id = security.id
+        units = activity.get("units")
+        price = activity.get("price")
+        fee = activity.get("fee")
+        currency = activity.get("currency") or {}
+        await service.upsert_trade(
+            owner_user_id=connection.owner_user_id,
+            account_id=account_id,
+            trade_type=_map_snaptrade_trade_type(activity.get("type"), amount_cents),
+            subtype=activity.get("option_type") or activity.get("type"),
+            trade_date=trade_date,
+            amount=amount_cents,
+            security_id=security_id,
+            quantity_e8=round(units * 10**8) if units is not None else None,
+            price=round(price * 100) if price is not None else None,
+            fees=round(fee * 100) if fee is not None else None,
+            currency=(
+                currency.get("code", "usd")
+                if isinstance(currency, dict)
+                else (currency or "usd")
+            ).lower(),
+            source=Provider.SNAPTRADE,
+            external_id=str(external_id),
+            external_id_source=Provider.SNAPTRADE,
+            name=activity.get("description"),
+            connection_id=connection.id,
+            raw_payload=activity,
+        )
+        count += 1
+    return count
+
+
+async def sync_snaptrade_connection(
+    db: AsyncSession,
+    connection: FinanceConnection,
+    *,
+    client: SnapTradeClient | None = None,
+) -> SyncResult:
+    """Sync one SnapTrade authorization: accounts + positions every run,
+    activities at most once per day per account.
+
+    SnapTrade's launch guide budgets polling (holdings a few times a day,
+    activities ~daily) and refreshes its own upstream cache daily anyway.
+    ``sync_cursor`` stores the date of the last activities pull: the window
+    re-opens from there (minus a small overlap) and the activity-id dedup
+    absorbs the overlap, mirroring the Plaid investments lane.
+    """
+    client = client or SnapTradeClient()
+    service = FinanceService(db)
+    result = SyncResult(connection_id=connection.id)
+    connection.last_sync_attempt_at = _utcnow()
+    if not connection.access_token_encrypted or not connection.provider_item_id:
+        return result
+    user_id = (
+        "" if client.is_personal else _snaptrade_user_id(connection.owner_user_id)
+    )
+    user_secret = decrypt_secret(
+        connection.access_token_encrypted, context=_SNAPTRADE_SECRET_CONTEXT
+    )
+
+    accounts = [
+        account
+        for account in await client.list_accounts(user_id, user_secret)
+        if str(account.get("brokerage_authorization") or "")
+        == connection.provider_item_id
+    ]
+    account_map = await _upsert_snaptrade_accounts(db, service, connection, accounts)
+    result.accounts = len(account_map)
+
+    today = _utcnow().date()
+    last_pull = (
+        date.fromisoformat(connection.sync_cursor) if connection.sync_cursor else None
+    )
+    pull_activities = last_pull is None or last_pull < today
+    start = (
+        today - timedelta(days=_SNAPTRADE_LOOKBACK_DAYS)
+        if last_pull is None
+        else last_pull - timedelta(days=_SNAPTRADE_ACTIVITY_OVERLAP_DAYS)
+    )
+
+    for snaptrade_id, account_id in account_map.items():
+        positions = await client.get_positions(user_id, user_secret, snaptrade_id)
+        result.holdings += await _apply_snaptrade_positions(
+            service,
+            positions,
+            account_id=account_id,
+            owner_user_id=connection.owner_user_id,
+        )
+        if not pull_activities:
+            continue
+        offset = 0
+        while True:
+            page = await client.get_activities(
+                user_id,
+                user_secret,
+                snaptrade_id,
+                start_date=start.isoformat(),
+                end_date=today.isoformat(),
+                offset=offset,
+                limit=_SNAPTRADE_ACTIVITY_PAGE,
+            )
+            batch = page.get("data") or []
+            result.trades += await _apply_snaptrade_activities(
+                service, batch, account_id=account_id, connection=connection
+            )
+            offset += len(batch)
+            total = (page.get("pagination") or {}).get("total")
+            if not batch or len(batch) < _SNAPTRADE_ACTIVITY_PAGE:
+                break
+            if total is not None and offset >= int(total):
+                break
+
+    if pull_activities:
+        connection.sync_cursor = today.isoformat()
+    connection.status = "healthy"
+    connection.needs_user_action = False
+    connection.last_successful_sync_at = _utcnow()
+    db.add(connection)
+    await db.flush()
+    return result

@@ -7,6 +7,7 @@ including title, status badge, scrollable sections, and close button.
 
 import flet as ft
 from app.components.frontend.controls import H2Text, SecondaryText, StatusTag
+from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
@@ -102,12 +103,11 @@ class BaseDetailPopup(BasePopup):
                 ft.Container(
                     content=ft.Row(
                         [
-                            ft.TextButton(
-                                "Close",
-                                on_click=self._handle_close_click,
-                                style=ft.ButtonStyle(
-                                    color=ft.Colors.ON_SURFACE_VARIANT,
-                                ),
+                            PulseButton(
+                                on_click_callable=self._handle_close,
+                                text="Close",
+                                variant="muted",
+                                compact=True,
                             )
                         ],
                         alignment=ft.MainAxisAlignment.END,
@@ -202,3 +202,9 @@ class BaseDetailPopup(BasePopup):
         self.hide()
         if e.page:
             e.page.update()
+
+    async def _handle_close(self) -> None:
+        """Close the popup (PulseButton's async no-arg contract)."""
+        self.hide()
+        if self.page:
+            self.page.update()

@@ -49,7 +49,7 @@ from app.services.insights.jobs import collect_plausible_job
 {% if include_finance %}
 from app.services.finance.jobs import finance_recompute_snapshots_job
 {% endif %}
-{% if include_finance and finance_plaid %}
+{% if include_finance and (finance_plaid or finance_snaptrade) %}
 from app.services.finance.jobs import finance_sync_connections_job
 {% endif %}
 
@@ -317,7 +317,7 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 {% endif %}
-{% if include_finance and finance_plaid %}
+{% if include_finance and (finance_plaid or finance_snaptrade) %}
     # Keep linked banks fresh: pull new transactions/balances a few times a day
     # so the register isn't stale between logins (webhooks handle the real-time
     # nudge when a public URL is configured).

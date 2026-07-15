@@ -45,7 +45,6 @@ class _FakeView(BaseView):
 @pytest.fixture(autouse=True)
 def _reset_router_state() -> None:
     routing.ROUTE_TO_VIEW.clear()
-    routing._route_guard["in_flight"] = False
     _FakeView.on_enter_calls = []
     _FakeView.on_leave_calls = 0
 
@@ -55,6 +54,8 @@ def _make_page() -> MagicMock:
     page.session_id = "test"
     page.route = "/"
     page.views = []
+    # The reentrancy guard is session-scoped and lives on page.data.
+    page.data = {}
     return page
 
 
@@ -208,10 +209,26 @@ def test_redirect_to_login_no_op_when_already_on_login() -> None:
 @pytest.mark.asyncio
 async def test_reentrancy_guard_blocks_concurrent_route_changes() -> None:
     routing.register_route("/x", _FakeView)
-    routing._route_guard["in_flight"] = True
     page = _make_page()
+    page.data[routing._ROUTE_IN_FLIGHT_KEY] = True
 
     await routing.route_change(page, ft.RouteChangeEvent(route="/x"))
 
     assert _FakeView.on_enter_calls == []  # blocked
+
+
+@pytest.mark.asyncio
+async def test_route_guard_is_session_scoped() -> None:
+    """One session's in-flight route change must not block another's - a
+    process-wide guard used to leave the second browser session permanently
+    blank (its view was never built)."""
+    routing.register_route("/x", _FakeView)
+    busy = _make_page()
+    busy.data[routing._ROUTE_IN_FLIGHT_KEY] = True
+    other = _make_page()
+
+    with patch.object(routing, "is_authenticated", AsyncMock(return_value=True)):
+        await routing.route_change(other, ft.RouteChangeEvent(route="/x"))
+
+    assert len(_FakeView.on_enter_calls) == 1  # not blocked by the busy session
 {%- endif %}
