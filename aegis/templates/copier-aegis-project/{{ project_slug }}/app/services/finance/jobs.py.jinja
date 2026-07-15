@@ -48,13 +48,16 @@ async def finance_recompute_snapshots_job() -> None:
         )
     except Exception:
         logger.exception("Finance snapshot recompute failed")
-{%- if finance_plaid %}
+{%- if finance_plaid or finance_snaptrade %}
 
 
 async def finance_sync_connections_job() -> None:
-    """Periodic: refresh every Plaid connection (accounts, balances, and new
-    transactions) per owner. ``sync_owner_connections`` also recomputes net
-    worth, so the register and Overview trend stay current without a reconnect.
+    """Periodic: refresh every provider connection (accounts, balances, new
+    transactions, holdings) per owner. ``sync_owner_connections`` dispatches on
+    each connection's provider and also recomputes net worth, so the register
+    and Overview trend stay current without a reconnect. SnapTrade activities
+    are internally throttled to one pull per account per day (their polling
+    budget), so a more frequent schedule stays within it.
     """
     from app.services.finance import connection_service
 
@@ -64,7 +67,7 @@ async def finance_sync_connections_job() -> None:
                 await session.exec(
                     select(FinanceConnection.owner_user_id)
                     .where(
-                        FinanceConnection.provider == "plaid",
+                        FinanceConnection.provider.in_(("plaid", "snaptrade")),
                         FinanceConnection.deleted_at.is_(None),
                     )
                     .distinct()
@@ -78,7 +81,7 @@ async def finance_sync_connections_job() -> None:
                 added += sum(r.added for r in results)
             await session.commit()
         logger.info(
-            "Finance: synced Plaid connections for %d owner(s), %d new txn(s)",
+            "Finance: synced connections for %d owner(s), %d new txn(s)",
             len(owners),
             added,
         )

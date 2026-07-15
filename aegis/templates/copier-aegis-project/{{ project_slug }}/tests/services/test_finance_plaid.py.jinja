@@ -518,10 +518,15 @@ class TestPlaidConnection:
         accounts, _ = await svc.list_accounts(owner_user_id=1)
         assert len(accounts) == 4
 
-        ok = await connection_service.disconnect_connection(
+        ok, revoke = await connection_service.disconnect_connection(
             async_db_session, conn.id, owner_user_id=1, client=client
         )
         assert ok is True
+        # Local teardown never waits on the provider round trip - the caller
+        # runs the returned revoke AFTER responding (BackgroundTasks).
+        assert client.removed_tokens == []
+        assert revoke is not None
+        await revoke()
         assert client.removed_tokens == ["tok"]  # Item revoked at Plaid
         # Connection drops from the active listing; accounts drop from listings.
         conns = await connection_service.list_plaid_connections(
@@ -551,17 +556,19 @@ class TestPlaidConnection:
     async def test_disconnect_missing_connection_returns_false(
         self, async_db_session: AsyncSession
     ) -> None:
-        ok = await connection_service.disconnect_connection(
+        ok, revoke = await connection_service.disconnect_connection(
             async_db_session, 999, owner_user_id=1, client=FakePlaidClient([], [])
         )
         assert ok is False
+        assert revoke is None
 
     @pytest.mark.asyncio
     async def test_disconnect_tears_down_locally_when_plaid_revoke_fails(
         self, async_db_session: AsyncSession
     ) -> None:
         """A stuck/invalid Item must still be removable: a Plaid error on
-        item/remove is swallowed and the local teardown proceeds."""
+        item/remove is swallowed (in the deferred revoke) and the local
+        teardown has already happened."""
         from app.services.finance.providers.plaid import PlaidError
 
         class BoomClient(FakePlaidClient):
@@ -575,7 +582,7 @@ class TestPlaidConnection:
         await connection_service.sync_plaid_connection(
             async_db_session, conn, client=client
         )
-        ok = await connection_service.disconnect_connection(
+        ok, revoke = await connection_service.disconnect_connection(
             async_db_session, conn.id, owner_user_id=1, client=client
         )
         assert ok is True
@@ -583,6 +590,8 @@ class TestPlaidConnection:
             async_db_session, owner_user_id=1
         )
         assert conns == []
+        assert revoke is not None
+        await revoke()  # provider error is swallowed and logged, never raised
 
     @pytest.mark.asyncio
     async def test_disconnect_tears_down_locally_when_plaid_unreachable(
@@ -602,10 +611,34 @@ class TestPlaidConnection:
         await connection_service.sync_plaid_connection(
             async_db_session, conn, client=client
         )
-        ok = await connection_service.disconnect_connection(
+        ok, revoke = await connection_service.disconnect_connection(
             async_db_session, conn.id, owner_user_id=1, client=client
         )
         assert ok is True
+        conns = await connection_service.list_plaid_connections(
+            async_db_session, owner_user_id=1
+        )
+        assert conns == []
+        assert revoke is not None
+        await revoke()  # network failure is swallowed and logged, never raised
+
+    @pytest.mark.asyncio
+    async def test_disconnect_with_undecryptable_token_still_tears_down(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A corrupted/rekeyed ciphertext must not block the local teardown:
+        the disconnect succeeds with no revoke (nothing usable to revoke)."""
+        client = FakePlaidClient(_ACCOUNTS, _TXNS)
+        conn = await connection_service.create_plaid_connection(
+            async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
+        )
+        conn.access_token_encrypted = "not-a-valid-ciphertext"
+        ok, revoke = await connection_service.disconnect_connection(
+            async_db_session, conn.id, owner_user_id=1, client=client
+        )
+        assert ok is True
+        assert revoke is None
+        assert client.removed_tokens == []
         conns = await connection_service.list_plaid_connections(
             async_db_session, owner_user_id=1
         )

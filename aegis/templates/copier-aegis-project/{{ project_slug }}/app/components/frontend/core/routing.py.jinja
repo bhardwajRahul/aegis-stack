@@ -43,8 +43,12 @@ if TYPE_CHECKING:
 # Route registry. Populated by ``register_route`` from the app bootstrap.
 ROUTE_TO_VIEW: dict[str, type["BaseView"]] = {}
 
-# Reentrancy guard to swallow rapid-fire route changes.
-_route_guard = {"in_flight": False}
+# Key for the per-session reentrancy guard, stored on ``page.data``. It must
+# be session-scoped: a module-level guard is shared by every session in the
+# process, so two sessions routing at the same instant (a second tab, a
+# reconnect) would block each other — and the blocked session renders blank
+# forever, since its view is never built.
+_ROUTE_IN_FLIGHT_KEY = "_route_in_flight"
 
 
 def register_route(route: str, view_cls: type["BaseView"]) -> None:
@@ -95,15 +99,18 @@ async def _call_on_leave(page: ft.Page) -> None:
 
 async def route_change(page: ft.Page, event: ft.RouteChangeEvent) -> None:
     """``page.on_route_change`` handler. Drives the View lifecycle."""
-    if _route_guard["in_flight"]:
+    if page.data is None:
+        page.data = {}
+    if page.data.get(_ROUTE_IN_FLIGHT_KEY):
         logger.warning(
             "router.reentrancy_blocked",
             current=page.route,
             attempted=event.route,
+            session_id=page.session_id,
         )
         return
 
-    _route_guard["in_flight"] = True
+    page.data[_ROUTE_IN_FLIGHT_KEY] = True
     try:
         raw_route = event.route or "/"
         route = deepcopy(raw_route).rstrip("/") or "/"
@@ -153,7 +160,7 @@ async def route_change(page: ft.Page, event: ft.RouteChangeEvent) -> None:
         except Exception:
             pass
     finally:
-        _route_guard["in_flight"] = False
+        page.data[_ROUTE_IN_FLIGHT_KEY] = False
 
 
 async def view_pop(page: ft.Page, event: ft.ViewPopEvent) -> None:
