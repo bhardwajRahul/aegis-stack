@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Windows-friendly dev commands**: generated projects now ship a
+  `[tool.poe.tasks]` table (via `poethepoet`) covering the `Makefile`
+  workflow, so `uv run poe <target>` (e.g. `uv run poe serve`, `uv run poe
+  check`) can be used on Windows, where `make` isn't a native binary (after
+  a one-time `uv sync --all-extras`). `make` itself is unchanged for existing
+  users. The bash-only `resolve-ports.sh` / `find-free-port.sh`
+  port-resolution scripts are replaced by a single Python implementation
+  (`scripts/resolve_ports.py`, `scripts/dev_tasks.py`) shared by both
+  interfaces.
+
 ## [0.9.1] - 2026-07-12
 
 ### Added
