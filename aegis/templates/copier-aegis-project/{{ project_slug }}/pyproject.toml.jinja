@@ -64,6 +64,9 @@ dependencies = [
 {%- if include_observability %}
     "logfire[fastapi,httpx{%- if include_database %},sqlalchemy{%- endif %}{%- if include_redis %},redis{%- endif %}]",
 {%- endif %}
+{%- if include_htmx %}
+    "jinja2>=3.1.0",
+{%- endif %}
 {%- if include_auth %}
     "python-jose[cryptography]==3.3.0",
     "bcrypt>=4.0.0",
@@ -78,7 +81,7 @@ dependencies = [
 {%- if include_auth or include_payment or include_insights or include_blog or include_finance or (include_ai and ai_backend in ["sqlite", "postgres"]) or (include_scheduler and scheduler_backend == "postgres") %}
     "alembic==1.16.5",
 {%- endif %}
-{%- if include_auth or include_ai or include_blog or include_finance %}
+{%- if include_auth or include_ai or include_blog or include_finance or include_htmx %}
     "python-multipart==0.0.9",
 {%- endif %}
 {%- if include_ai %}
@@ -168,8 +171,8 @@ dev = [
     # the app itself runs on Postgres.
     "aiosqlite>=0.19.0",
 {%- endif %}
-{%- if include_worker %}
-    # Development auto-reload for workers
+{%- if include_worker or include_htmx %}
+    # Auto-reload for workers; asset rebuilds for the web frontend watcher
     "watchdog==4.0.2",
 {%- endif %}
 ]
@@ -187,6 +190,25 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+{%- if include_htmx %}
+
+[tool.djlint]
+# The web frontend's templates are Jinja; without this profile djlint reads
+# their tag blocks as raw text and reports nonsense.
+profile = "jinja"
+# Only rules that are wrong for this stack are disabled, so djlint stays a
+# real guard for the rest (unclosed tags, missing alt text, and so on):
+#   J018  wants internal links to use url_for(). That is a Flask/Django
+#         pattern; Starlette's url_for needs named routes and the request in
+#         context, and these pages link to literal paths.
+#   T003  wants every endblock to repeat its block's name. These templates
+#         don't, matching the upstream they were ported from.
+#   H030  wants a meta description on every file. base.html is a layout:
+#         pages that want one set it in head_extra (the landing does), and
+#         the auth pages are deliberately noindex.
+#   H031  wants meta keywords, which search engines have ignored for years.
+ignore = "J018,T003,H030,H031"
+{%- endif %}
 
 [tool.ruff]
 line-length = 88

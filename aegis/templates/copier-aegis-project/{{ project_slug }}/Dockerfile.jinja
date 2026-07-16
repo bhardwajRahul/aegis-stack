@@ -1,3 +1,31 @@
+{%- if include_htmx %}
+# ---------------------------------------------------------------------------
+# css-build — compile Tailwind + DaisyUI ahead of time. The output ships in
+# the final image as a plain static file; Node and npm never run at runtime.
+# ---------------------------------------------------------------------------
+FROM node:22-alpine AS css-build
+WORKDIR /build
+
+# npm deps first so the layer caches across source changes.
+COPY package.json package-lock.json* ./
+RUN npm install --no-audit --no-fund
+
+# The config, entry stylesheet, and every source Tailwind scans for class
+# usage. A class that lives outside these paths is not emitted.
+COPY tailwind.config.js ./
+COPY app/components/web_frontend/static/input.css \
+     ./app/components/web_frontend/static/input.css
+COPY app/components/web_frontend/templates \
+     ./app/components/web_frontend/templates
+COPY app/components/web_frontend/static/js \
+     ./app/components/web_frontend/static/js
+
+RUN npx tailwindcss \
+    -i ./app/components/web_frontend/static/input.css \
+    -o ./app/components/web_frontend/static/dist/app.css \
+    --minify
+
+{% endif %}
 FROM python:{{ python_version }}-slim
 
 # Install system dependencies and clean up
@@ -56,6 +84,19 @@ RUN uv sync --all-extras && \
 
 # Copy application code
 COPY . /code
+{%- if include_htmx %}
+
+# Overlay the compiled stylesheet from the css-build stage. It is gitignored,
+# so it is absent from the build context; this is the only thing that puts it
+# in the image. Dev compose runs a tailwind watcher instead.
+COPY --from=css-build /build/app/components/web_frontend/static/dist/app.css \
+     /code/app/components/web_frontend/static/dist/app.css
+
+# Fingerprint static assets (writes dist/<name>-<hash>.<ext> + manifest.json).
+# Pure stdlib, so it runs without the venv. Unlocks Cache-Control:
+# max-age=1y, immutable at runtime.
+RUN python -m app.components.web_frontend.build
+{%- endif %}
 
 # Make entrypoint executable
 RUN chmod +x /code/scripts/entrypoint.sh

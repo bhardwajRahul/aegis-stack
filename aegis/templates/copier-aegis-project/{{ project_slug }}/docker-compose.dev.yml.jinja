@@ -84,3 +84,32 @@ services:
   test_runner:
     volumes:
       - .:/code
+{%- if include_htmx %}
+
+  tailwind:
+    image: node:22-alpine
+    working_dir: /code
+    volumes:
+      - .:/code
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
+    entrypoint: sh
+    command:
+      - -c
+      - npm install --no-audit --no-fund --silent && exec npx tailwindcss -i /code/app/components/web_frontend/static/input.css -o /code/app/components/web_frontend/static/dist/app.css --watch=always
+    profiles:
+      - dev
+
+  build-static-watcher:
+    image: ${AEGIS_STACK_TAG:-aegis-stack:latest}
+    env_file:
+      - ${AEGIS_STACK_ENV_FILE:-.env}
+    working_dir: /code
+    volumes:
+      - .:/code
+    command:
+      - build-watch
+    profiles:
+      - dev
+{%- endif %}

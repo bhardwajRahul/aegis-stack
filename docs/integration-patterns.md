@@ -227,7 +227,7 @@ async def queue_report(user_id: int):
 
 ### Frontend ↔ Backend
 
-Flet frontend runs in the same process as FastAPI backend, so it can call services directly:
+Both frontends run in the same process as the FastAPI backend, so they call services directly. The Flet dashboard:
 
 ```python
 # app/components/frontend/pages/dashboard.py
@@ -239,13 +239,27 @@ async def update_dashboard():
     # Update Flet UI with status data
 ```
 
-For generated projects, Frontend and Backend share the same container, making this direct access fast and simple.
+And the htmx web frontend (when selected), from a page or partial handler:
+
+```python
+# app/components/web_frontend/routes/pages.py
+from app.services.system import get_system_status
+
+@router.get("/status", response_class=HTMLResponse, include_in_schema=False)
+async def status_page(request: Request) -> HTMLResponse:
+    status = await get_system_status()
+    return templates.TemplateResponse(
+        request=request, name="pages/status.html", context={"status": status}
+    )
+```
+
+For generated projects, both frontends and the backend share the same container, making this direct access fast and simple.
 
 ## Container Boundaries
 
 Each component runs in its own Docker container for independent scaling:
 
-- **Backend Container**: Runs FastAPI + Flet (Frontend)
+- **Backend Container**: Runs FastAPI + Flet (and the htmx web frontend when selected)
 - **Scheduler Container**: Runs APScheduler for scheduled jobs
 - **Worker Container**: Runs arq for background task processing
 

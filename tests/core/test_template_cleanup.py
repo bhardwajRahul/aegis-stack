@@ -1138,3 +1138,35 @@ class TestSyncFormattingNoise:
 
         assert result.conflicts == []
         assert project_file.read_text() == user_content
+
+
+class TestRuffExecutableResolution:
+    """Formatting parity depends on WHICH ruff formats the render.
+
+    Init formats with the project's pinned ruff (make fix runs inside the
+    project); the tool's own ruff floats and can format differently. The
+    resolver must therefore prefer the target project's binary, or add/regen
+    output drifts from init output on any machine where the two versions
+    disagree (this is exactly what CI's fresh resolve exposed).
+    """
+
+    def test_prefers_the_projects_own_ruff(self, tmp_path: Path) -> None:
+        from aegis.core.template_cleanup import ruff_executable
+
+        project_ruff = tmp_path / ".venv" / "bin" / "ruff"
+        project_ruff.parent.mkdir(parents=True)
+        project_ruff.write_text("#!/bin/sh\n")
+
+        assert ruff_executable(tmp_path) == str(project_ruff)
+
+    def test_falls_back_to_the_tools_ruff_without_a_project_venv(
+        self, tmp_path: Path
+    ) -> None:
+        from aegis.core.template_cleanup import ruff_executable
+
+        resolved = ruff_executable(tmp_path)  # tmp_path has no .venv
+        assert resolved is not None
+        # Not something conjured under the (venv-less) project dir...
+        assert not Path(resolved).is_relative_to(tmp_path)
+        # ...but exactly the tool's own answer.
+        assert resolved == ruff_executable(None)

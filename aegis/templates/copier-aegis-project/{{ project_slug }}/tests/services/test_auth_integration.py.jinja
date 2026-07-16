@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.core.security import create_access_token, verify_password, verify_token
 from app.models.user import User, UserCreate
 from app.services.auth.auth_service import get_current_user_from_token
-from app.services.auth.user_service import RestoreConflict, UserService
+from app.services.auth.user_service import RestoreConflictError, UserService
 from fastapi import HTTPException
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -276,7 +276,7 @@ class TestAuthServiceIntegration:
         )
         assert replacement.id != original.id
 
-        with pytest.raises(RestoreConflict):
+        with pytest.raises(RestoreConflictError):
             await user_service.restore_user(original.id)
 
         # And the original row is still soft-deleted (rollback worked).

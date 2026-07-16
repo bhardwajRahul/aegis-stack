@@ -46,7 +46,7 @@ from app.services.auth.invite_service import InviteService
 from app.services.auth.membership_service import MembershipService
 from app.services.auth.org_service import (
     OrgService,
-    RestoreConflict as OrgRestoreConflict,
+    RestoreConflictError as OrgRestoreConflictError,
 )
 from app.services.auth.user_service import UserService
 
@@ -275,7 +275,7 @@ async def restore_org(
     {%- endif %}
     try:
         restored = await org_service.restore_org(org_id)
-    except OrgRestoreConflict as exc:
+    except OrgRestoreConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
         ) from exc

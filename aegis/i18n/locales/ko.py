@@ -40,6 +40,7 @@ MESSAGES: dict[str, str] = {
     "init.config_name": "이름:",
     "init.config_core": "코어:",
     "init.config_infra": "인프라:",
+    "init.config_web_frontend": "Web frontend:",
     "init.config_services": "서비스:",
     "init.component_files": "컴포넌트 파일:",
     "init.entrypoints": "진입점:",
@@ -68,6 +69,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "SQLModel ORM 데이터베이스 (SQLite 또는 PostgreSQL)",
     "component.ingress": "Traefik 리버스 프록시 및 로드 밸런서",
     "component.observability": "Logfire 관측성, 트레이싱 및 메트릭",
+    "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
     "service.auth": "JWT 토큰 기반 사용자 인증 및 권한 부여",
     "service.ai": "멀티 프레임워크 지원 AI 챗봇 서비스",
@@ -515,6 +517,7 @@ MESSAGES: dict[str, str] = {
         "  frontend     - Flet 프론트엔드 인터페이스 (항상 포함)"
     ),
     "components.infra_title": "인프라 컴포넌트",
+    "components.frontend_title": "FRONTEND COMPONENTS",
     "components.requires": "필수: {deps}",
     "components.recommends": "권장: {deps}",
     "components.usage_hint": (
@@ -1023,6 +1026,7 @@ MESSAGES: dict[str, str] = {
     "guided.hint.files": "파일",
     "guided.review.core": "코어:",
     "guided.review.infrastructure": "인프라:",
+    "guided.review.web_frontend": "Web frontend:",
     "guided.review.services": "서비스:",
     "guided.review.auto": "자동",
     "guided.review.build": "{name} 생성",
@@ -1039,6 +1043,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "캐시와 메시지 브로커로 사용되는 인메모리 데이터 저장소. 백그라운드 작업 큐와 서비스 간 pub/sub 메시징을 구동하고, 요청 핸들러에 빠른 공유 캐시를 제공합니다.",
     "component.ingress.long": "Traefik를 이용한 리버스 프록시와 트래픽 라우팅: 자동 서비스 검색, 관리 엔드포인트 보호, Let's Encrypt를 통한 선택적 TLS. 배포의 정문입니다.",
     "component.observability.long": "Pydantic Logfire를 이용한 분산 추적, 메트릭, 로그 상관관계. 애플리케이션을 자동 계측하고 활성화한 컴포넌트에 맞게 적응하므로, 프로덕션이 실제로 무엇을 하는지 볼 수 있습니다.",
+    "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "JWT 인증, 세션 쿠키, 리프레시 토큰 회전을 갖춘 완전한 사용자 관리. 세 가지 레벨: 기본 이메일/비밀번호, RBAC 역할 및 권한, 멀티테넌트 조직. 회원가입, 로그인, 관리자 대시보드 탭을 포함합니다.",
     "service.ai.long": "완전한 AI 플랫폼: 멀티 프로바이더 채팅, 약 2000개 모델의 LLM 카탈로그, 사용 분석을 포함한 비용 추적, 코드베이스를 이해하는 대화를 위한 선택적 RAG, 선택적 음성(TTS/STT). 프레임워크는 Pydantic AI 또는 LangChain 중에서 선택합니다.",
     "service.comms.long": "업계 프로바이더를 사용한 이메일, SMS, 음성 통화: 이메일은 Resend, SMS와 음성은 Twilio. 둘 다 무료 등급이 있어 신용카드 없이 시작할 수 있습니다.",

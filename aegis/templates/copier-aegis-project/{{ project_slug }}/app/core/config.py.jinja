@@ -97,6 +97,18 @@ class Settings(
 
     # Flet frontend settings
     FLET_ASSETS_DIR: str = "assets"  # Directory for Flet static assets (images, etc.)
+{%- if include_htmx %}
+
+    # Web frontend settings (server-rendered pages at /). Both paths are
+    # relative to the project root; the static dir holds the sources, and a
+    # build writes fingerprinted output into its ``dist/`` subdirectory.
+    WEB_TEMPLATES_DIR: str = "app/components/web_frontend/templates"
+    WEB_STATIC_DIR: str = "app/components/web_frontend/static"
+    # One-liner describing the project. Rendered in the landing hero and
+    # in its SEO meta description; defaults to what you typed when
+    # generating the project.
+    PROJECT_DESCRIPTION: str = "{{ project_description }}"
+{%- endif %}
 
     # Authentication settings
 {%- if include_auth %}

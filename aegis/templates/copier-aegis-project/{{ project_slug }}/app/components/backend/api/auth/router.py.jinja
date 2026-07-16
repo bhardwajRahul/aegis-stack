@@ -50,7 +50,7 @@ from app.models.user import (
 from app.services.auth.auth_service import get_current_user_from_token
 from app.services.auth.deps import get_current_active_user, get_session_token
 from app.services.auth.refresh_service import RefreshService
-from app.services.auth.user_service import RestoreConflict, UserService
+from app.services.auth.user_service import RestoreConflictError, UserService
 {% if include_auth_org %}
 from app.services.auth.invite_service import InviteService
 {% endif %}
@@ -716,7 +716,7 @@ async def restore_user(
     """
     try:
         restored = await user_service.restore_user(user_id)
-    except RestoreConflict as exc:
+    except RestoreConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
         ) from exc
@@ -848,7 +848,7 @@ async def restore_user(
     """
     try:
         restored = await user_service.restore_user(user_id)
-    except RestoreConflict as exc:
+    except RestoreConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
         ) from exc

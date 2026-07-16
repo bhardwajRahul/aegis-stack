@@ -16,7 +16,7 @@ Do you:
 
 **A) Over-engineer for "future scale"** *(workers, queues, caching, message buses...)*
 
-**B) Ship the minimal viable stack** *(FastAPI + Flet)*
+**B) Ship the minimal viable stack** *(FastAPI + Flet, with an htmx web frontend one `aegis add htmx` away)*
 
 With Aegis Stack, you can confidently choose **B** - because adding components later is trivial.
 

@@ -72,6 +72,7 @@ Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your S
 | Component | Purpose | Status |
 |-----------|---------|--------|
 | **Core** (FastAPI + Flet) | Web API + Overseer | ✅ **Always Included** |
+| **[Web Frontend](components/web-frontend/index.md)** (htmx) | Server-rendered pages at `/`, beside the Overseer | ✅ **Available** |
 | **Database** | SQLite or PostgreSQL + SQLModel ORM | ✅ **Available** |
 | **Scheduler** | Background tasks, cron jobs | ✅ **Available** |
 | **Worker** | Task queues (arq, Dramatiq, or TaskIQ) | ✅ **Available** |

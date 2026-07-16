@@ -46,18 +46,28 @@ class BuildPlan:
     worker_queues: list[str] = field(default_factory=list)
     dependencies: list[str] = field(default_factory=list)
 
-    @property
-    def infrastructure(self) -> list[str]:
-        """Non-CORE components for display, selection order preserved."""
+    def _of_type(self, component_type: ComponentType) -> list[str]:
+        """Selected components of one type, selection order preserved."""
         out = []
         for name in self.components:
             base = extract_base_component_name(name)
-            if (
-                base in COMPONENTS
-                and COMPONENTS[base].type == ComponentType.INFRASTRUCTURE
-            ):
+            if base in COMPONENTS and COMPONENTS[base].type == component_type:
                 out.append(name)
         return out
+
+    @property
+    def infrastructure(self) -> list[str]:
+        """Infrastructure components for display.
+
+        Excludes optional frontends: describing those as infrastructure is
+        what :attr:`frontend` exists to avoid.
+        """
+        return self._of_type(ComponentType.INFRASTRUCTURE)
+
+    @property
+    def frontend(self) -> list[str]:
+        """Optional frontend components for display (CORE Flet is not one)."""
+        return self._of_type(ComponentType.FRONTEND)
 
 
 def resolve_build_plan(

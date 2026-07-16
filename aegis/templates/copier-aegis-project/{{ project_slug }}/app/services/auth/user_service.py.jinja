@@ -33,7 +33,7 @@ class RegistrationClosed(Exception):
 {% endif %}
 
 
-class RestoreConflict(Exception):
+class RestoreConflictError(Exception):
     """Raised by ``restore_user`` when the soft-deleted user's email is
     already held by another live user. The partial unique index
     ``ix_user_email`` allows re-registration after a soft delete, so
@@ -260,7 +260,7 @@ class UserService:
 
         Looks the row up directly (bypassing the soft-delete filter on
         ``get_user_by_id``). Returns ``None`` if the row doesn't exist or
-        is already live. Raises ``RestoreConflict`` if another live user
+        is already live. Raises ``RestoreConflictError`` if another live user
         has claimed the email since the soft delete (partial unique
         index ``ix_user_email`` would reject the commit otherwise).
         """
@@ -279,7 +279,7 @@ class UserService:
         )
         conflict = (await self.db.exec(conflict_stmt)).first()
         if conflict is not None:
-            raise RestoreConflict(
+            raise RestoreConflictError(
                 f"Email '{user.email}' is already in use by an active account"
             )
 

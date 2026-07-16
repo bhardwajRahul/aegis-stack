@@ -16,11 +16,22 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from pydantic import BaseModel, Field
 
 from aegis.config.shared_files import SHARED_TEMPLATE_FILES
-from aegis.constants import AnswerKeys, AuthLevels, ComponentNames, StorageBackends
+from aegis.constants import (
+    AnswerKeys,
+    AuthLevels,
+    ComponentNames,
+    StorageBackends,
+    WorkerBackends,
+)
 from aegis.i18n import t
 
 from ..cli import brand
-from .component_files import get_component_files, get_copier_defaults, get_template_path
+from .component_files import (
+    get_component_cleanup_paths,
+    get_component_files,
+    get_copier_defaults,
+    get_template_path,
+)
 from .copier_manager import is_copier_project, load_copier_answers
 from .plugins.template_resolver import get_plugin_template_root
 from .template_cleanup import (
@@ -387,7 +398,7 @@ class ManualUpdater:
                             or is_auth_upgrade
                             or is_empty_stub
                         ):
-                            output_path.write_text(content)
+                            self._write_rendered(output_path, content)
                             verbose_print(f"   Regenerated: {relative_path}")
                             files_modified.append(relative_path)
                             continue
@@ -398,9 +409,25 @@ class ManualUpdater:
                         continue
 
                     # Write file
-                    output_path.write_text(content)
+                    self._write_rendered(output_path, content)
                     verbose_print(f"   Created: {relative_path}")
                     files_modified.append(relative_path)
+
+            # Worker backend variants (Pattern D): the manifest just wrote
+            # every backend's sibling files (pools_dramatiq.py, ...). Run the
+            # same rename/strip pass init runs, or the project keeps arq code
+            # at the canonical names with the variants strewn alongside.
+            if component == ComponentNames.WORKER:
+                from .post_gen_tasks import cleanup_worker_backend_files
+
+                cleanup_worker_backend_files(
+                    self.project_path,
+                    str(
+                        updated_answers.get(
+                            AnswerKeys.WORKER_BACKEND, WorkerBackends.ARQ
+                        )
+                    ),
+                )
 
             # Regenerate shared template files with updated component configuration
             (
@@ -540,16 +567,16 @@ class ManualUpdater:
             if not self.answers.get(include_key):
                 raise ValueError(f"Component '{component}' is not enabled")
 
-            # Get files for this component
-            backend_variant = (
-                self.answers.get(AnswerKeys.SCHEDULER_BACKEND)
-                if component == ComponentNames.SCHEDULER
-                else None
-            )
             # Removal deletes the complete footprint (primary + every gated
             # extra), so option-specific files (auth org, AI rag/voice,
-            # scheduler persistence) don't leak behind.
-            component_files = get_component_files(component, backend_variant, full=True)
+            # scheduler persistence) don't leak behind — which is why no
+            # backend variant is consulted here.
+            #
+            # Paths stay unexpanded so a directory is removed as a directory:
+            # expanding it to the files the template ships would strand
+            # anything the project grew since (``__pycache__``, built assets)
+            # and leave the tree behind.
+            component_files = get_component_cleanup_paths(component)
 
             # Delete each file
             deleted_paths: list[Path] = []
@@ -590,15 +617,21 @@ class ManualUpdater:
                 updated_answers[AnswerKeys.SCHEDULER_BACKEND] = StorageBackends.MEMORY
                 updated_answers[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = False
 
-            # Update .copier-answers.yml before regenerating shared files
-            self._save_answers(updated_answers)
-
-            # Regenerate shared template files with component removed
+            # Regenerate shared files BEFORE persisting the new answers, the
+            # same order ``add_component`` uses. ``_save_answers`` also
+            # reassigns ``self.answers``, and ``_shared_file_is_pristine``
+            # renders its baseline from that: save first and the baseline
+            # becomes the post-removal render, so every file that ought to
+            # change looks hand-edited, the merge finds base == ours, and the
+            # file is left wired to the component we just deleted. See #869.
             (
                 shared_files_updated,
                 shared_files_backed_up,
                 shared_files_need_manual_merge,
             ) = self._regenerate_shared_files(updated_answers)
+
+            # Update .copier-answers.yml
+            self._save_answers(updated_answers)
 
             # Run post-generation tasks to clean up dependencies
             self.run_post_generation_tasks()
@@ -679,15 +712,32 @@ class ManualUpdater:
     def _ruff_normalize(self, src: str) -> str | None:
         """Return ``src`` run through the project's full ruff (check --fix + format).
 
-        Used only to compare two snippets for *semantic* equality: applying
-        the same transformation to both sides cancels formatting-only
-        differences (import merging/sorting, quote style, line wrapping)
-        that ``make fix`` introduces but a user did not. Because the
-        transform is applied symmetrically, the exact ruff version is
-        irrelevant — only determinism matters. Result is never written to
-        disk, so the destructive rules (unused-import removal) are fine here.
+        Used to compare two snippets for *semantic* equality (applying the
+        same transformation to both sides cancels formatting-only
+        differences that ``make fix`` introduces but a user did not), and by
+        :meth:`_write_rendered` to format template renders before writing.
+        The destructive rules (unused-import removal) are safe in both
+        cases: comparison results stay off disk, and written content is
+        always a template default, never user code.
         """
         return self._run_ruff(src, "")
+
+    def _write_rendered(self, output_path: Path, content: str) -> None:
+        """Write a rendered template file, formatted the way init formats it.
+
+        Init runs the project's ruff (check --fix + format) over every
+        generated file; writing a raw render here would leave add/remove
+        output drifting from init output by formatting alone — e.g. an
+        unused import that init stripped reappearing on every regen.
+        Rendered content is the template default, never user code, so the
+        destructive fix rules are safe. Falls back to the raw render when
+        ruff is unavailable or fails.
+        """
+        if output_path.suffix == ".py":
+            formatted = self._ruff_normalize(content)
+            if formatted is not None:
+                content = formatted
+        output_path.write_text(content)
 
     def _ruff_format_safe(self, src: str) -> str | None:
         """Normalize Python for *merging* without ever deleting code.
@@ -822,7 +872,7 @@ class ManualUpdater:
                 if content is None:
                     continue
                 output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_text(content)
+                self._write_rendered(output_path, content)
                 verbose_print(f"   Created: {shared_file}")
                 shared_files_updated.append(shared_file)
                 continue
@@ -875,7 +925,7 @@ class ManualUpdater:
                     shared_files_backed_up.append(shared_file)
 
                 # Regenerate with updated answers
-                output_path.write_text(content)
+                self._write_rendered(output_path, content)
                 verbose_print(f"   Updated: {shared_file}")
                 shared_files_updated.append(shared_file)
 
@@ -928,7 +978,7 @@ class ManualUpdater:
         if content is None:
             return None
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(content)
+        self._write_rendered(output_path, content)
         verbose_print(f"   Created cross-spec file: {_SERVICES_CARD_FILE}")
         return _SERVICES_CARD_FILE
 
@@ -1024,7 +1074,7 @@ class ManualUpdater:
             content = template.render(self.answers)
 
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(content)
+            self._write_rendered(out_path, content)
             files_written.append(str(out_rel))
 
         return files_written
@@ -1068,22 +1118,27 @@ class ManualUpdater:
                     f"Plugin {spec.name!r} is not installed in this project"
                 )
 
-            # Drop the plugin from answers + persist before any disk
-            # cleanup. If the cleanup fails the answers still reflect
-            # reality; a re-run picks up where we left off.
             updated_plugins = [
                 p for p in existing_plugins if p.get("name") != spec.name
             ]
             updated_answers = {**self.answers, PLUGINS_ANSWER_KEY: updated_plugins}
-            self._save_answers(updated_answers)
 
-            # Shared file regen — plugin's wiring is no longer in
-            # ``_plugins``, so loops emit nothing for it.
+            # Shared file regen — the plugin is no longer in ``_plugins``, so
+            # its wiring loops emit nothing for it. This runs BEFORE the
+            # answers are persisted: ``_save_answers`` reassigns
+            # ``self.answers``, which is what ``_shared_file_is_pristine``
+            # renders its baseline from, so saving first makes every file
+            # needing regeneration look hand-edited and it gets skipped. Same
+            # bug as remove_component's. See #869.
             (
                 shared_updated,
                 shared_backed_up,
                 shared_manual_merge,
             ) = self._regenerate_shared_files(updated_answers)
+
+            # Persist. If the disk cleanup below fails, the answers still
+            # reflect reality and a re-run picks up where we left off.
+            self._save_answers(updated_answers)
 
             # Plugin's own files. ``FileManifest.iter_cleanup_paths``
             # with ``selected=False`` walks the manifest as if the

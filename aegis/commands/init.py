@@ -164,21 +164,23 @@ def _show_config_and_confirm(
         f"   {brand.muted_text(t('init.config_core'))} {', '.join(CORE_COMPONENTS)}"
     )
 
-    # Show infrastructure components
-    infra_components = []
-    for name in selected_components:
-        # Handle database[engine] format
-        base_name = extract_base_component_name(name)
-        if (
-            base_name in COMPONENTS
-            and COMPONENTS[base_name].type == ComponentType.INFRASTRUCTURE
-        ):
-            infra_components.append(name)
+    # Show selected components, grouped by type so the labels stay true:
+    # an optional frontend is not infrastructure.
+    def _selected_of_type(component_type: ComponentType) -> list[str]:
+        out = []
+        for name in selected_components:
+            # Handle database[engine] format
+            base_name = extract_base_component_name(name)
+            if base_name in COMPONENTS and COMPONENTS[base_name].type == component_type:
+                out.append(name)
+        return out
 
-    if infra_components:
-        typer.echo(
-            f"   {brand.muted_text(t('init.config_infra'))} {', '.join(infra_components)}"
-        )
+    for label_key, group in (
+        ("init.config_infra", _selected_of_type(ComponentType.INFRASTRUCTURE)),
+        ("init.config_web_frontend", _selected_of_type(ComponentType.FRONTEND)),
+    ):
+        if group:
+            typer.echo(f"   {brand.muted_text(t(label_key))} {', '.join(group)}")
 
     # Show selected services
     if selected_services:

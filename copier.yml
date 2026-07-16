@@ -76,6 +76,11 @@ python_version:
     - "3.14"
 
 # Component selection
+include_htmx:
+  type: bool
+  help: "Include htmx web frontend?"
+  default: false
+
 include_scheduler:
   type: bool
   help: "Include APScheduler for scheduled tasks?"

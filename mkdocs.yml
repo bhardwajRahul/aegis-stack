@@ -6,6 +6,14 @@ site_url: https://docs.aegis-stack.io/
 repo_url: https://github.com/lbedner/aegis-stack
 repo_name: lbedner/aegis-stack
 
+# Internal material that lives under docs/ but must never reach the published
+# site. Excluded files are not built at all, so they are also absent from the
+# search index (nav-orphan pages otherwise still get built and indexed, which
+# is how internal planning docs were surfacing in site search).
+exclude_docs: |
+  plans/
+  CLAUDE.md
+
 theme:
   name: material
   custom_dir: docs/overrides
@@ -59,13 +67,20 @@ nav:
       - Getting Started: components/database.md
       - Neon: components/database/neon.md
     - Frontend:
-      - Getting Started: components/frontend/index.md
-      - Architecture: components/frontend/architecture.md
-      - Routing & Views: components/frontend/routing.md
-      - Session State: components/frontend/state.md
-      - API Client: components/frontend/api-client.md
-      - Events: components/frontend/events.md
-      - Example: components/frontend/example.md
+      - Flet Dashboard:
+        - Getting Started: components/frontend/index.md
+        - Architecture: components/frontend/architecture.md
+        - Routing & Views: components/frontend/routing.md
+        - Session State: components/frontend/state.md
+        - API Client: components/frontend/api-client.md
+        - Events: components/frontend/events.md
+        - Example: components/frontend/example.md
+      - Web Frontend (htmx):
+        - Overview: components/web-frontend/index.md
+        - Templates & Partials: components/web-frontend/templates-and-partials.md
+        - Styling & Theming: components/web-frontend/styling.md
+        - Asset Pipeline: components/web-frontend/asset-pipeline.md
+        - Auth Pages: components/web-frontend/auth-pages.md
     - Scheduler:
       - Getting Started: components/scheduler.md
       - Examples: components/scheduler/examples.md
@@ -113,6 +128,7 @@ nav:
       - Provider Setup: services/comms/setup.md
       - API Reference: services/comms/api.md
       - CLI Commands: services/comms/cli.md
+      - Examples: services/comms/examples.md
     - Insights (Experimental):
       - Getting Started: services/insights/index.md
       - Data Sources: services/insights/data-sources.md

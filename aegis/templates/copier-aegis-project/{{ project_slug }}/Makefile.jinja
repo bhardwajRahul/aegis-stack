@@ -7,6 +7,11 @@ COMPOSE_PROD = docker compose -f docker-compose.yml -f docker-compose.prod.yml
 {%- else %}
 COMPOSE_PROD = docker compose -f docker-compose.yml
 {%- endif %}
+{%- if include_htmx %}
+# Biome's scope. Pointing it at the project root would reformat every .js in
+# the repo (docs scripts included) the first time anyone runs `make fix`.
+WEB_JS_DIR = app/components/web_frontend/static/js
+{%- endif %}
 
 #=============================================================================
 # CORE DOCKER COMMANDS
@@ -15,6 +20,13 @@ COMPOSE_PROD = docker compose -f docker-compose.yml
 build: ## Build Docker image
 	@echo "Building Docker image..."
 	@$(COMPOSE_DEV) build webserver
+{%- if include_htmx %}
+
+build-static: ## Compile Tailwind CSS and fingerprint assets into static/dist
+	@echo "Building static assets..."
+	@npm run build
+	@uv run python -m app.components.web_frontend.build
+{%- endif %}
 
 serve: build ## Run all services (auto-selects a free host port if the default is taken)
 	@echo "Starting services... (Press Ctrl+C to stop)"
@@ -146,15 +158,32 @@ test-verbose: ## Run tests with verbose output
 lint: ## Check code style with ruff
 	@echo "Running linting..."
 	@uv run ruff check .
+{%- if include_htmx %}
+	@$(MAKE) lint-frontend
+
+lint-frontend: ## Lint static JS (Biome) + Jinja templates (djlint)
+	@echo "Linting frontend (Biome JS + djlint templates)..."
+	@npx --yes @biomejs/biome@2.5.1 lint $(WEB_JS_DIR)
+	@uvx djlint@1.39.4 app/components/web_frontend/templates
+{%- endif %}
 
 fix: ## Auto-fix linting and formatting issues
 	@echo "Auto-fixing code issues..."
 	@-uv run ruff check . --fix
 	@uv run ruff format .
+{%- if include_htmx %}
+	@-npx --yes @biomejs/biome@2.5.1 lint --write $(WEB_JS_DIR)
+{%- endif %}
 
 format: ## Format code with ruff
 	@echo "Formatting code..."
 	@uv run ruff format .
+{%- if include_htmx %}
+
+format-frontend: ## Format static JS with Biome (opt-in; reflows files)
+	@echo "Formatting frontend JS with Biome..."
+	@npx --yes @biomejs/biome@2.5.1 format --write $(WEB_JS_DIR)
+{%- endif %}
 
 typecheck: ## Run type checking with ty
 	@echo "Running type checking..."
@@ -264,7 +293,7 @@ help: ## Show this help message
 	@echo
 	@echo "TIP: Use 'make refresh' when everything is broken!"
 
-.PHONY: build serve serve-bg serve-prod stop-prod stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if include_scheduler %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build{% if include_database %} migrate migrate-check migrate-history migrate-reset{% if database_engine == "postgres" %} db-clean db-fresh{% endif %}{% endif %} worker-test status help
+.PHONY: build{% if include_htmx %} build-static lint-frontend format-frontend{% endif %} serve serve-bg serve-prod stop-prod stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if include_scheduler %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build{% if include_database %} migrate migrate-check migrate-history migrate-reset{% if database_engine == "postgres" %} db-clean db-fresh{% endif %}{% endif %} worker-test status help
 
 # Default target - show help
 .DEFAULT_GOAL := help

@@ -280,6 +280,14 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/core/security.py",
                 "app/cli/auth.py",
                 ".claude/skills/protect-an-endpoint",
+                # htmx web frontend auth surface. Owned here, not by the htmx
+                # component: these exist only when auth does, and an
+                # htmx-without-auth project must not carry them. The reverse
+                # gate (no htmx) is covered by the htmx spec owning the whole
+                # web_frontend tree, so dropping either one removes them.
+                "app/components/web_frontend/templates/pages/auth",
+                "app/components/web_frontend/templates/components/auth_macros.html",
+                "app/components/web_frontend/static/js/auth.js",
                 "tests/api/test_auth_endpoints.py",
                 "tests/services/test_auth_integration.py",
                 # Goal service is auth-coupled (Goal.user_id FK to user table);

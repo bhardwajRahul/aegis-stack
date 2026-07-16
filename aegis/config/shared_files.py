@@ -66,6 +66,7 @@ _DEFAULT_POLICY_FILES: tuple[str, ...] = (
     "app/components/frontend/core/routing.py",  # auth redirect-to-login guard
     "app/components/frontend/core/events.py",  # auth check on page reconnect
     "app/components/frontend/state/session_state.py",  # auth session state
+    "app/integrations/main.py",  # htmx router + /static mount
     "app/components/backend/api/routing.py",  # conditional router includes
     "app/components/backend/api/deps.py",  # conditional dependency providers
     "app/components/backend/api/models.py",  # worker + scheduler API models
@@ -77,6 +78,8 @@ _DEFAULT_POLICY_FILES: tuple[str, ...] = (
     "app/services/system/backup.py",  # database backup functionality
     "tests/conftest.py",  # component-specific test fixtures
     ".env.example",  # component configuration env vars
+    ".gitignore",  # node_modules + built CSS for the htmx frontend
+    "scripts/entrypoint.sh",  # worker backend + build-watch dispatch
 )
 
 

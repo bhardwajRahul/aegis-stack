@@ -42,6 +42,7 @@ MESSAGES: dict[str, str] = {
     "init.config_name": "Nom :",
     "init.config_core": "Base :",
     "init.config_infra": "Infrastructure :",
+    "init.config_web_frontend": "Web frontend:",
     "init.config_services": "Services :",
     "init.component_files": "Fichiers des composants :",
     "init.entrypoints": "Points d'entrée :",
@@ -72,6 +73,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "Base de données avec ORM SQLModel (SQLite ou PostgreSQL)",
     "component.ingress": "Reverse proxy et répartiteur de charge Traefik",
     "component.observability": "Observabilité, traçage et métriques Logfire",
+    "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
     "service.auth": "Authentification et autorisation avec jetons JWT",
     "service.ai": "Service de chatbot IA avec support multi-framework",
@@ -550,6 +552,7 @@ MESSAGES: dict[str, str] = {
         "  frontend     - Interface frontend Flet (toujours inclus)"
     ),
     "components.infra_title": "COMPOSANTS D'INFRASTRUCTURE",
+    "components.frontend_title": "FRONTEND COMPONENTS",
     "components.requires": "Requis : {deps}",
     "components.recommends": "Recommandé : {deps}",
     "components.usage_hint": (
@@ -1076,6 +1079,7 @@ MESSAGES: dict[str, str] = {
     "guided.hint.files": "fichiers",
     "guided.review.core": "Cœur :",
     "guided.review.infrastructure": "Infrastructure :",
+    "guided.review.web_frontend": "Web frontend:",
     "guided.review.services": "Services :",
     "guided.review.auto": "auto",
     "guided.review.build": "Générer {name}",
@@ -1092,6 +1096,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "Magasin de données en mémoire utilisé comme cache et courtier de messages. Alimente les files de tâches en arrière-plan et la messagerie pub/sub entre vos services, et offre aux gestionnaires de requêtes un cache partagé rapide.",
     "component.ingress.long": "Proxy inverse et routage du trafic avec Traefik : découverte automatique des services, protection des points d'accès d'administration et TLS optionnel via Let's Encrypt. La porte d'entrée des déploiements.",
     "component.observability.long": "Traçage distribué, métriques et corrélation des journaux avec Pydantic Logfire. Instrumente automatiquement votre application et s'adapte aux composants activés, pour que vous voyiez ce que fait réellement la production.",
+    "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "Gestion complète des utilisateurs avec authentification JWT, cookies de session et rotation des jetons de rafraîchissement. Trois niveaux : e-mail/mot de passe basique, rôles et permissions RBAC, ou organisations multi-locataires. Inclut l'inscription, la connexion et un onglet de tableau de bord d'administration.",
     "service.ai.long": "Une plateforme IA complète : chat multi-fournisseurs, un catalogue de LLM d'environ 2000 modèles, suivi des coûts avec analyses d'utilisation, RAG optionnel pour des conversations qui connaissent votre code, et voix optionnelle (TTS/STT). Choisissez Pydantic AI ou LangChain comme framework.",
     "service.comms.long": "E-mail, SMS et appels vocaux via des fournisseurs reconnus : Resend pour l'e-mail, Twilio pour le SMS et la voix. Les deux proposent des offres gratuites, vous pouvez donc démarrer sans carte bancaire.",

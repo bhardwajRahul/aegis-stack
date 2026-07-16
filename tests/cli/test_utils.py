@@ -322,6 +322,26 @@ def run_aegis_init(
     Returns:
         CLITestResult with command results and project path
     """
+    # This runs the CLI in-process (CliRunner), so the module-global option
+    # selections that bracket-syntax callbacks set (auth[org] -> auth level,
+    # database[postgres] -> engine, ai[...] -> AI config) survive from one
+    # invocation to the next. A real CLI process starts clean every time;
+    # without this reset, a plain "auth" stack generated after an "auth[org]"
+    # stack silently renders at org level (observed: the stack matrix
+    # generated htmx_auth as auth_level=org because auth_org ran earlier in
+    # the same session).
+    from aegis.cli.interactive import (
+        clear_all_ai_selections,
+        clear_auth_level_selection,
+        clear_database_engine_selection,
+        clear_postgres_provider_selection,
+    )
+
+    clear_auth_level_selection()
+    clear_database_engine_selection()
+    clear_postgres_provider_selection()
+    clear_all_ai_selections()
+
     args = [project_name]
 
     if components:
@@ -415,6 +435,25 @@ def validate_pyproject_dependencies(
 
     except Exception as e:
         return [f"Error reading pyproject.toml: {e}"]
+
+
+def format_file_like_regen(file_path: Path, project_path: Path) -> None:
+    """Run a project file through the same ruff normalization the shared-file
+    regen path applies (``run_ruff_on_text`` with the project's config),
+    writing the result back.
+
+    Byte-identity tests arrange their ``before`` snapshot with this instead
+    of trusting init's non-critical ``make fix`` step, which can silently
+    fail under load and leave the fixture project unformatted. Both sides of
+    the comparison then ride the identical machinery: if ruff works, both
+    are formatted; if ruff is unavailable, both stay raw — the assertion
+    only breaks when the regen output itself drifts.
+    """
+    from aegis.core.template_cleanup import run_ruff_on_text
+
+    formatted = run_ruff_on_text(file_path.read_text(), project_path, "")
+    if formatted is not None:
+        file_path.write_text(formatted)
 
 
 def assert_file_exists(project_path: Path, relative_path: str) -> None:

@@ -106,6 +106,12 @@ elif [ "$run_command" = "worker" ]; then
         exec uv run python -m arq "${worker_module}" "$@"
     fi
 {%- endif %}
+{%- if include_htmx %}
+elif [ "$run_command" = "build-watch" ]; then
+    # Re-fingerprint web frontend assets whenever Tailwind (or a hand-edited
+    # source) rewrites them, so the manifest never goes stale in dev.
+    exec uv run python -m app.components.web_frontend.build_watch
+{%- endif %}
 elif [ "$run_command" = "lint" ]; then
     uv run ruff check .
 elif [ "$run_command" = "typecheck" ]; then
@@ -125,6 +131,9 @@ elif [ "$run_command" = "help" ]; then
 {%- else %}
     echo "  worker      - Run arq worker (standard arq CLI patterns)"
 {%- endif %}
+{%- if include_htmx %}
+    echo "  build-watch - Re-fingerprint web frontend assets on change"
+{%- endif %}
     echo "  health      - Check system health status"
     echo "  lint        - Run ruff linting"
     echo "  typecheck   - Run mypy type checking"
@@ -132,6 +141,6 @@ elif [ "$run_command" = "help" ]; then
     echo "  help        - Show this help message"
 else
     echo "Unknown command: $run_command"
-    echo "Available commands: webserver, scheduler, worker, health, lint, typecheck, test, help"
+    echo "Available commands: webserver, scheduler, worker,{% if include_htmx %} build-watch,{% endif %} health, lint, typecheck, test, help"
     exit 1
 fi

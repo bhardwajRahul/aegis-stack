@@ -21,7 +21,7 @@ from app.models.org import (
 )
 from app.services.auth.invite_service import InviteService
 from app.services.auth.membership_service import MembershipService
-from app.services.auth.org_service import OrgService, RestoreConflict
+from app.services.auth.org_service import OrgService, RestoreConflictError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -244,7 +244,7 @@ class TestOrgServiceIntegration:
         )
         assert replacement.id != original.id
 
-        with pytest.raises(RestoreConflict):
+        with pytest.raises(RestoreConflictError):
             await org_service.restore_org(original.id)
 
         raw = await async_db_session.exec(

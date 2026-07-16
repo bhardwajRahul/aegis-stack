@@ -7,7 +7,10 @@
 This Aegis Stack project includes the following components:
 
 - **Backend**: FastAPI-based async web server
-- **Frontend**: Flet-based Python UI framework
+- **Frontend**: Flet-based Python UI framework (Overseer dashboard at `/dashboard`)
+{%- if include_htmx %}
+- **Web Frontend**: Server-rendered pages at `/` (Jinja2 + htmx + Alpine, Tailwind/DaisyUI)
+{%- endif %}
 {%- if include_scheduler %}
 - **Scheduler**: APScheduler-based async task scheduling
 {%- endif %}
@@ -292,6 +295,9 @@ avoid lock-out — set a password or link another provider first.
 │   ├── components/         # Component implementations
 │   │   ├── backend/       # FastAPI backend
 │   │   └── frontend/      # Flet frontend
+{%- if include_htmx %}
+│   │   └── web_frontend/  # htmx web frontend (pages at /)
+{%- endif %}
 {%- if include_scheduler %}
 │   │   └── scheduler/     # APScheduler background tasks
 {%- endif %}

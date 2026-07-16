@@ -83,11 +83,25 @@ def normalize_for_compare(text: str) -> str:
     return "\n".join(line.rstrip() for line in lines).rstrip("\n")
 
 
-def ruff_executable() -> str | None:
-    """Locate a ruff binary, preferring the one in the running interpreter's
-    environment. ``ruff`` is a runtime dependency of aegis, so this is
-    normally present; returns None if it cannot be found (callers then bias
-    toward preserving the file rather than overwriting it)."""
+def ruff_executable(project_path: Path | None = None) -> str | None:
+    """Locate a ruff binary, preferring the target project's own.
+
+    Init formats every generated file with the *project's* pinned ruff
+    (post-gen ``make fix`` runs inside the project), so producing output
+    that matches init byte-for-byte requires the same binary. The tool's
+    own ruff is a floating dependency and can resolve to a formatter with
+    different output; formatting a project's files with it reintroduces
+    the add/regen drift the byte-identity tests guard against.
+
+    Falls back to the running interpreter's ruff, then PATH. Returns None
+    if nothing is found (callers then bias toward preserving the file
+    rather than overwriting it).
+    """
+    if project_path is not None:
+        for rel in ("bin/ruff", "Scripts/ruff.exe"):
+            candidate = project_path / ".venv" / rel
+            if candidate.is_file():
+                return str(candidate)
     candidate = Path(sys.executable).parent / "ruff"
     if candidate.is_file():
         return str(candidate)
@@ -112,7 +126,7 @@ def run_ruff_on_text(
     The temp file lives in the project so ruff discovers the project's
     ``[tool.ruff]`` config by walking up from the file's location.
     """
-    ruff = ruff_executable()
+    ruff = ruff_executable(project_path)
     if ruff is None:
         return None
     tmp_path = ""
