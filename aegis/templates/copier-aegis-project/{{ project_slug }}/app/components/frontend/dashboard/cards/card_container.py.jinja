@@ -53,7 +53,7 @@ class CardContainer(ft.Container):
             padding=0,
             animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
             width=width,
-            height=280,
+            height=350,
             on_hover=self._handle_hover,
             on_click=self._handle_click,
         )
