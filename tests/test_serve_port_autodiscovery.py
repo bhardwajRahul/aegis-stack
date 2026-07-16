@@ -1,35 +1,42 @@
-"""Tests for `make serve` host-port auto-discovery (issue #702).
+"""Tests for `make serve` / `uv run poe serve` host-port auto-discovery.
 
-Generated projects ship two helper scripts that let `make serve` /
-`make serve-bg` pick a free host port when the default is already taken
-(another `make serve` running, an unrelated service on 8000, etc.)
-instead of dying with `bind: address already in use`:
-
-  - scripts/find-free-port.sh   -> prints the first free TCP port >= START
-  - scripts/resolve-ports.sh    -> emits `export VAR=port` lines for compose
-
-Both are plain bash (no Jinja), so they are exercised directly here.
+Generated projects ship ``scripts/resolve_ports.py`` so ``serve`` /
+``serve-bg`` pick a free host port when the default is already taken
+(another ``serve`` running, an unrelated service on 8000, etc.) instead of
+dying with ``bind: address already in use``. The module is a plain Python
+file in the template tree (no Jinja), so it is loaded and exercised directly
+here for fast framework-level feedback; the generated project's own
+``tests/test_resolve_ports.py`` covers it end-to-end after rendering.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import socket
-import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from types import ModuleType
 
-TEMPLATE_SCRIPTS = (
+RESOLVE_PORTS_PY = (
     Path(__file__).parent.parent
     / "aegis"
     / "templates"
     / "copier-aegis-project"
     / "{{ project_slug }}"
     / "scripts"
+    / "resolve_ports.py"
 )
 
-FIND_FREE_PORT = TEMPLATE_SCRIPTS / "find-free-port.sh"
-RESOLVE_PORTS = TEMPLATE_SCRIPTS / "resolve-ports.sh"
+
+def _load_resolve_ports() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "template_resolve_ports", RESOLVE_PORTS_PY
+    )
+    assert spec and spec.loader, f"cannot load {RESOLVE_PORTS_PY}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @contextmanager
@@ -45,176 +52,64 @@ def occupy_port() -> Iterator[int]:
         sock.close()
 
 
-def _run(
-    script: Path, *args: str, env: dict[str, str] | None = None
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["bash", str(script), *args],
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+def _free_port() -> int:
+    """Return a currently-free ephemeral port (closed before returning)."""
+    with occupy_port() as port:
+        return port
 
 
-# --------------------------------------------------------------------------- #
-# Both scripts must exist                                                      #
-# --------------------------------------------------------------------------- #
+def test_module_exists() -> None:
+    assert RESOLVE_PORTS_PY.exists(), f"missing {RESOLVE_PORTS_PY}"
 
 
-def test_helper_scripts_exist() -> None:
-    assert FIND_FREE_PORT.exists(), f"missing {FIND_FREE_PORT}"
-    assert RESOLVE_PORTS.exists(), f"missing {RESOLVE_PORTS}"
-
-
-# --------------------------------------------------------------------------- #
-# find-free-port.sh                                                           #
-# --------------------------------------------------------------------------- #
-
-
-def test_find_free_port_returns_a_free_port_at_or_above_start() -> None:
-    """Given a free start port, the script returns a port >= start.
-
-    Asserting `>= start` (rather than exact equality) keeps the test
-    deterministic on busy hosts where `start` may get grabbed between the
-    probe and the result. We deliberately do NOT re-bind the returned
-    port to assert it is "still free": that is an inherent TOCTOU race
-    (another process can grab it the instant after the script returns)
-    and was the source of cross-worker flakiness under `pytest -n`. The
-    "skips a port that is actually in use" guarantee is covered
-    deterministically by test_find_free_port_skips_taken_port.
-    """
-    with occupy_port() as taken:
-        start = taken + 1
-    result = _run(FIND_FREE_PORT, str(start))
-    assert result.returncode == 0, result.stderr
-    chosen = int(result.stdout.strip())
+def test_find_free_port_returns_free_port_at_or_above_start() -> None:
+    module = _load_resolve_ports()
+    start = _free_port()
+    chosen = module._find_free_port(start)
     assert chosen >= start
 
 
 def test_find_free_port_skips_taken_port() -> None:
-    """When the start port is in use, the next free port is returned."""
+    module = _load_resolve_ports()
     with occupy_port() as taken:
-        result = _run(FIND_FREE_PORT, str(taken))
-    assert result.returncode == 0, result.stderr
-    chosen = int(result.stdout.strip())
-    assert chosen > taken, f"expected a port above {taken}, got {chosen}"
+        chosen = module._find_free_port(taken)
+    assert chosen > taken
 
 
-def test_find_free_port_fails_when_range_exhausted() -> None:
-    """With max=1 and the only candidate taken, the script reports failure."""
-    with occupy_port() as taken:
-        result = _run(FIND_FREE_PORT, str(taken), "1")
-    assert result.returncode != 0
-    assert result.stdout.strip() == ""
-
-
-# --------------------------------------------------------------------------- #
-# resolve-ports.sh                                                            #
-# --------------------------------------------------------------------------- #
-
-
-def test_resolve_ports_emits_webserver_export() -> None:
-    """Default run emits an evalable WEBSERVER_HOST_PORT export plus a banner."""
-    result = _run(RESOLVE_PORTS)
-    assert result.returncode == 0, result.stderr
-    assert "export WEBSERVER_HOST_PORT=" in result.stdout
-    # Human banner goes to stderr so stdout stays eval-safe.
-    assert "127.0.0.1" in result.stderr
-
-
-def test_resolve_ports_shifts_when_base_taken() -> None:
-    """When the configured base port is busy, the exported port differs."""
-    with occupy_port() as taken:
-        env = {"WEBSERVER_PORT_BASE": str(taken), "PATH": _path()}
-        result = _run(RESOLVE_PORTS, env=env)
-    assert result.returncode == 0, result.stderr
-    line = next(
-        ln
-        for ln in result.stdout.splitlines()
-        if ln.startswith("export WEBSERVER_HOST_PORT=")
+def test_resolve_ports_writes_only_allowlisted_keys(tmp_path: Path) -> None:
+    module = _load_resolve_ports()
+    ports_file = tmp_path / ".env.ports"
+    ports = module.resolve_ports(
+        ingress=True,
+        postgres=True,
+        redis=True,
+        ollama=True,
+        ports_file=ports_file,
     )
-    chosen = int(line.split("=", 1)[1])
-    assert chosen != taken
-    assert "in use" in result.stderr
+    content = ports_file.read_text()
+    # The four keys config.py declares as Settings fields may be persisted.
+    for key in (
+        "POSTGRES_HOST_PORT",
+        "REDIS_HOST_PORT",
+        "OLLAMA_HOST_PORT",
+        "INGRESS_DASHBOARD_PORT",
+    ):
+        assert key in content
+    # These reach docker compose via the returned dict, never .env.ports —
+    # config.py's strict Settings would reject the unknown keys at boot.
+    assert "WEBSERVER_HOST_PORT" not in content
+    assert "INGRESS_HTTP_PORT" not in content
+    assert ports["WEBSERVER_HOST_PORT"]
+    assert ports["INGRESS_HTTP_PORT"]
 
 
-def test_resolve_ports_ingress_emits_traefik_ports() -> None:
-    """--ingress adds the traefik HTTP + dashboard exports."""
-    result = _run(RESOLVE_PORTS, "--ingress")
-    assert result.returncode == 0, result.stderr
-    assert "export WEBSERVER_HOST_PORT=" in result.stdout
-    assert "export INGRESS_HTTP_PORT=" in result.stdout
-    assert "export INGRESS_DASHBOARD_PORT=" in result.stdout
-
-
-# --------------------------------------------------------------------------- #
-# resolve-ports.sh: backing-service host ports                                #
-#                                                                             #
-# Only the HOST publish is shifted (developer convenience). Containers keep   #
-# their fixed internal ports, so in-network clients (which use the service    #
-# name) are unaffected.                                                        #
-# --------------------------------------------------------------------------- #
-
-
-def _exported(stdout: str, var: str) -> int:
-    line = next(ln for ln in stdout.splitlines() if ln.startswith(f"export {var}="))
-    return int(line.split("=", 1)[1])
-
-
-def test_resolve_ports_backing_services_off_by_default() -> None:
-    """No backing-service exports unless the stack opts in via flags."""
-    result = _run(RESOLVE_PORTS)
-    assert result.returncode == 0, result.stderr
-    assert "export POSTGRES_HOST_PORT=" not in result.stdout
-    assert "export REDIS_HOST_PORT=" not in result.stdout
-    assert "export OLLAMA_HOST_PORT=" not in result.stdout
-
-
-def test_resolve_ports_postgres_emits_export() -> None:
-    """--postgres adds a POSTGRES_HOST_PORT export."""
-    result = _run(RESOLVE_PORTS, "--postgres")
-    assert result.returncode == 0, result.stderr
-    assert "export POSTGRES_HOST_PORT=" in result.stdout
-
-
-def test_resolve_ports_postgres_shifts_when_base_taken() -> None:
-    """A busy 5432 (modeled via base override) yields a different host port."""
-    with occupy_port() as taken:
-        env = {"POSTGRES_PORT_BASE": str(taken), "PATH": _path()}
-        result = _run(RESOLVE_PORTS, "--postgres", env=env)
-    assert result.returncode == 0, result.stderr
-    assert _exported(result.stdout, "POSTGRES_HOST_PORT") != taken
-    assert "in use" in result.stderr
-
-
-def test_resolve_ports_redis_and_ollama_emit_exports() -> None:
-    """--redis / --ollama add their respective host-port exports."""
-    result = _run(RESOLVE_PORTS, "--redis", "--ollama")
-    assert result.returncode == 0, result.stderr
-    assert "export REDIS_HOST_PORT=" in result.stdout
-    assert "export OLLAMA_HOST_PORT=" in result.stdout
-
-
-def test_resolve_ports_backing_services_use_plain_host_banner() -> None:
-    """Backing services print a plain host:port, not a misleading http:// URL."""
-    result = _run(RESOLVE_PORTS, "--postgres")
-    assert result.returncode == 0, result.stderr
-    assert (
-        "postgres: 127.0.0.1:" in result.stderr
-        or "postgres on 127.0.0.1:" in result.stderr
+def test_resolve_ports_backing_services_off_by_default(tmp_path: Path) -> None:
+    module = _load_resolve_ports()
+    ports = module.resolve_ports(
+        ingress=False,
+        postgres=False,
+        redis=False,
+        ollama=False,
+        ports_file=tmp_path / ".env.ports",
     )
-    assert "http://127.0.0.1" not in result.stderr.split("postgres", 1)[1]
-
-
-def test_resolve_ports_rejects_unknown_flag() -> None:
-    """A typo'd flag fails fast instead of silently emitting nothing."""
-    result = _run(RESOLVE_PORTS, "--postgress")
-    assert result.returncode == 2
-    assert "unknown flag" in result.stderr
-    assert result.stdout.strip() == ""
-
-
-def _path() -> str:
-    import os
-
-    return os.environ.get("PATH", "")
+    assert set(ports) == {"WEBSERVER_HOST_PORT"}

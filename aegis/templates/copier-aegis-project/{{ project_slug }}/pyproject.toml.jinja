@@ -165,6 +165,9 @@ dev = [
     "types-psutil==7.0.0.20250801",
     "pre-commit==4.2.0",
     "pip-audit==2.9.0",
+    # Cross-platform task runner; `uv run poe <target>` mirrors `make <target>`
+    # for Windows, where `make` isn't a native binary.
+    "poethepoet==0.48.0",
 {%- if include_database and database_engine != 'sqlite' %}
     # Tests use in-memory SQLite for speed/isolation regardless of the
     # production backend, so aiosqlite is required as a test dep even when
@@ -294,6 +297,255 @@ exclude = [".venv", "venv", ".tox", "build", "dist"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+# Windows-compatible mirror of the Makefile: `uv run poe <target>` means the
+# same thing as `make <target>` on any OS, since `make` isn't a native
+# Windows binary. Kept as independent entries with the Makefile's literal
+# commands (not delegating through `make`) so nothing changes for existing
+# Mac/Linux `make` usage; the port-resolution/env-file logic behind
+# serve/serve-bg/serve-prod{% if include_database %}/migrate-reset{% endif %} lives once in scripts/dev_tasks.py and is called
+# from both interfaces.
+[tool.poe.tasks.build]
+help = "Build Docker image"
+cmd = "docker compose -f docker-compose.yml -f docker-compose.dev.yml build webserver"
+
+{% if include_htmx %}
+[tool.poe.tasks.build-static]
+help = "Compile Tailwind CSS and fingerprint assets into static/dist"
+sequence = [
+    { cmd = "npm run build" },
+    { cmd = "uv run python -m app.components.web_frontend.build" },
+]
+
+{% endif %}
+[tool.poe.tasks.serve]
+help = "Run all services (auto-selects a free host port if the default is taken)"
+sequence = ["build", { script = "scripts.dev_tasks:serve" }]
+
+[tool.poe.tasks.serve-bg]
+help = "Run all services in background (auto-selects a free host port if the default is taken)"
+script = "scripts.dev_tasks:serve_bg"
+
+[tool.poe.tasks.serve-prod]
+help = "Run all services with the production profile (prod config; no dev mounts/debug ports)"
+script = "scripts.dev_tasks:serve_prod"
+
+[tool.poe.tasks.stop-prod]
+help = "Stop the production-profile services"
+{% if include_ingress %}
+cmd = "docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod down --remove-orphans"
+{% else %}
+cmd = "docker compose -f docker-compose.yml --profile prod down --remove-orphans"
+{% endif %}
+
+[tool.poe.tasks.stop]
+help = "Gracefully stop all services"
+cmd = "docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile dev down --remove-orphans"
+
+[tool.poe.tasks.clean]
+help = "Clean up project containers, networks, volumes, and images"
+cmd = "docker compose -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans --volumes --rmi all"
+ignore_fail = true
+
+[tool.poe.tasks.rebuild]
+help = "Build images and start services"
+sequence = ["build", "serve"]
+
+[tool.poe.tasks.refresh]
+help = "Nuclear reset - clean everything and rebuild"
+sequence = ["clean", "build", "serve"]
+
+[tool.poe.tasks.restart]
+help = "Quick restart (no rebuild)"
+sequence = ["stop", "serve"]
+
+[tool.poe.tasks.logs]
+help = "Follow logs from all services"
+cmd = "docker compose logs -f"
+
+[tool.poe.tasks.logs-web]
+help = "Follow webserver logs only"
+cmd = "docker compose logs -f webserver"
+
+[tool.poe.tasks.logs-worker]
+help = "Follow worker logs only"
+cmd = "docker compose logs -f worker-system worker-load-test"
+
+[tool.poe.tasks.logs-redis]
+help = "Follow Redis logs only"
+cmd = "docker compose logs -f redis"
+
+{% if include_scheduler %}
+[tool.poe.tasks.logs-scheduler]
+help = "Follow scheduler logs only"
+cmd = "docker compose logs -f scheduler"
+
+{% endif %}
+[tool.poe.tasks.shell]
+help = "Open shell in webserver container"
+cmd = "docker compose exec webserver /bin/bash"
+
+[tool.poe.tasks.shell-worker]
+help = "Open shell in worker container"
+cmd = "docker compose exec worker-system /bin/bash"
+
+[tool.poe.tasks.ps]
+help = "Show running containers"
+cmd = "docker compose ps"
+
+[tool.poe.tasks.redis-cli]
+help = "Connect to Redis CLI"
+cmd = "docker compose exec redis redis-cli"
+
+[tool.poe.tasks.redis-stats]
+help = "Show Redis memory and stats"
+cmd = "docker compose exec redis redis-cli info memory"
+
+[tool.poe.tasks.redis-keys]
+help = "Show all Redis keys"
+cmd = 'docker compose exec redis redis-cli keys "*"'
+
+[tool.poe.tasks.redis-reset]
+help = "Clear all Redis data"
+cmd = "docker compose exec redis redis-cli flushall"
+
+[tool.poe.tasks.health]
+help = "Check system health status"
+cmd = "uv run {{ project_slug }} health status"
+
+[tool.poe.tasks.health-detailed]
+help = "Detailed system health information"
+cmd = "uv run {{ project_slug }} health status --detailed"
+
+[tool.poe.tasks.health-json]
+help = "System health as JSON"
+cmd = "uv run {{ project_slug }} health status --json"
+
+[tool.poe.tasks.health-probe]
+help = "Health probe (exits 1 if unhealthy)"
+cmd = "uv run {{ project_slug }} health probe"
+
+[tool.poe.tasks.test]
+help = "Run tests locally"
+cmd = "uv run pytest"
+
+[tool.poe.tasks.test-verbose]
+help = "Run tests with verbose output"
+cmd = "uv run pytest -v"
+
+[tool.poe.tasks.lint]
+help = "Check code style with ruff"
+{% if include_htmx %}
+sequence = [
+    { cmd = "uv run ruff check ." },
+    "lint-frontend",
+]
+{% else %}
+cmd = "uv run ruff check ."
+{% endif %}
+
+{% if include_htmx %}
+[tool.poe.tasks.lint-frontend]
+help = "Lint static JS (Biome) + Jinja templates (djlint)"
+sequence = [
+    { cmd = "npx --yes @biomejs/biome@2.5.1 lint app/components/web_frontend/static/js" },
+    { cmd = "uvx djlint@1.39.4 app/components/web_frontend/templates" },
+]
+
+{% endif %}
+[tool.poe.tasks.fix]
+help = "Auto-fix linting and formatting issues"
+sequence = [
+    { cmd = "uv run ruff check . --fix", ignore_fail = true },
+    { cmd = "uv run ruff format ." },
+    {%- if include_htmx %}
+    { cmd = "npx --yes @biomejs/biome@2.5.1 lint --write app/components/web_frontend/static/js", ignore_fail = true },
+    {%- endif %}
+]
+
+[tool.poe.tasks.format]
+help = "Format code with ruff"
+cmd = "uv run ruff format ."
+
+{% if include_htmx %}
+[tool.poe.tasks.format-frontend]
+help = "Format static JS with Biome (opt-in; reflows files)"
+cmd = "npx --yes @biomejs/biome@2.5.1 format --write app/components/web_frontend/static/js"
+
+{% endif %}
+[tool.poe.tasks.typecheck]
+help = "Run type checking with ty"
+cmd = "uv run ty check"
+
+[tool.poe.tasks.check]
+help = "Run all code quality checks"
+sequence = ["lint", "typecheck", "test", { cmd = 'echo "All checks completed successfully!"' }]
+
+[tool.poe.tasks.install]
+help = "Install/sync dependencies with uv"
+cmd = "uv sync --all-extras"
+
+[tool.poe.tasks.deps-update]
+help = "Update dependencies"
+cmd = "uv sync --upgrade"
+
+[tool.poe.tasks.clean-cache]
+help = "Clean Python cache files"
+script = "scripts.dev_tasks:clean_cache"
+
+[tool.poe.tasks.docs-serve]
+help = "Serve documentation locally (http://localhost:8001)"
+cmd = "uv run mkdocs serve --dev-addr 0.0.0.0:8001"
+
+[tool.poe.tasks.docs-build]
+help = "Build static documentation"
+cmd = "uv run mkdocs build"
+
+{% if include_database %}
+[tool.poe.tasks.migrate]
+help = "Apply database migrations"
+cmd = "docker compose exec webserver uv run alembic -c alembic/alembic.ini upgrade head"
+
+[tool.poe.tasks.migrate-check]
+help = "Check migration status"
+cmd = "docker compose exec webserver uv run alembic -c alembic/alembic.ini current"
+
+[tool.poe.tasks.migrate-history]
+help = "Show migration history"
+cmd = "docker compose exec webserver uv run alembic -c alembic/alembic.ini history --verbose"
+
+[tool.poe.tasks.migrate-fix]
+help = "Auto-fix schema mismatches after upgrade (safe: only adds, never drops)"
+cmd = "docker compose exec webserver uv run python -m app.cli.migrate_fix"
+
+[tool.poe.tasks.migrate-reset]
+help = "Reset database (WARNING: destructive)"
+script = "scripts.dev_tasks:migrate_reset"
+
+{% if database_engine == "postgres" %}
+[tool.poe.tasks.db-clean]
+help = "Remove postgres volume (nuclear reset when DB is broken)"
+sequence = [
+    { cmd = "docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile dev down --remove-orphans" },
+    { cmd = "docker volume rm {{ project_slug }}_postgres-data", ignore_fail = true },
+    { cmd = "echo \"Postgres volume removed. Run 'uv run poe serve' to start fresh.\"" },
+]
+
+[tool.poe.tasks.db-fresh]
+help = "Nuclear DB reset + restart"
+sequence = ["db-clean", "serve"]
+
+{% endif %}
+{% endif %}
+{% if include_worker %}
+[tool.poe.tasks.worker-test]
+help = "Test workers in burst mode (process and exit)"
+cmd = "uv run python -m arq app.components.worker.queues.system.WorkerSettings --burst"
+
+{% endif %}
+[tool.poe.tasks.status]
+help = "Show current system status"
+script = "scripts.dev_tasks:status"
 
 [dependency-groups]
 dev = [

@@ -80,6 +80,7 @@ _DEFAULT_POLICY_FILES: tuple[str, ...] = (
     ".env.example",  # component configuration env vars
     ".gitignore",  # node_modules + built CSS for the htmx frontend
     "scripts/entrypoint.sh",  # worker backend + build-watch dispatch
+    "scripts/dev_tasks.py",  # serve/serve-prod compose flags vary by stack
 )
 
 

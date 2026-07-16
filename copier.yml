@@ -394,11 +394,9 @@ _exclude:
   # macOS artifacts
   - ".DS_Store"
 
-  # Validation directory (template testing only)
-  - "clean-validation"
-
-  # Ephemeral runtime artifact written by `make serve` (resolve-ports.sh).
-  # Never part of the template; only the generated project creates it at run
-  # time. Shipping it would inject host-port keys a given stack's config may
-  # not define, failing startup with a strict-settings "extra" error.
+  # Ephemeral runtime artifact written by `make serve` / `uv run poe serve`
+  # (scripts/resolve_ports.py). Never part of the template; only the
+  # generated project creates it at run time. Shipping it would inject
+  # host-port keys a given stack's config may not define, failing startup
+  # with a strict-settings "extra" error.
   - ".env.ports"
