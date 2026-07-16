@@ -7,8 +7,47 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-16
+
 ### Added
 
+- **htmx web frontend** (`include_htmx`): an additive server-rendered web
+  frontend component alongside the Flet Overseer, with a Tailwind build
+  pipeline, landing page, and Docker wiring. Selection-gated like every
+  component; existing stacks are untouched unless opted in.
+- **SnapTrade brokerage integration for the finance service**
+  (`finance_snaptrade`): a second aggregator alongside Plaid, proving the
+  provider abstraction, so a SnapTrade-connected brokerage lands in the same
+  tables and UI with zero schema changes. Connect portal flow, authorization
+  adoption, and polling sync for accounts, positions, and activities within
+  SnapTrade's polling budget. Supports both commercial keys (per-user
+  registration) and personal `PERS-` keys (the key is the user; no
+  registration). Securities reported by multiple aggregators merge to one
+  catalog row via FIGI/CUSIP/ISIN.
+- **Plaid live connectivity for the finance service** (`finance_plaid`):
+  hosted-link connect flow, token exchange with AES-GCM-encrypted storage,
+  account ingestion, cursor-based transactions sync, webhook handling, and a
+  failure-isolated nightly sync job on the scheduler.
+- **Finance categorization and insights**: internal transfer detection and
+  pairing (a card payment no longer double-counts as spend),
+  recurring-stream detection, and "wasting money" insights, recomputed
+  post-sync and nightly; plus investment trades in the register and account
+  detail.
+- **Finance provider CLI commands**: `finance sync` refreshes every provider
+  connection; `finance snaptrade connect` / `complete` drive the brokerage
+  connect flow end to end from the terminal.
+- **AI chat kit** (`app/services/ai/chat_kit`): a reusable conversation
+  toolkit for generated projects (agent wrapper, token budgeting, context
+  assembly, persistent history), with a TaskIQ broker for background AI
+  work.
+- **Agent skills**: generated projects now ship a selection-aware
+  `CLAUDE.md` and `.claude/skills/` workflow skills gated by what the stack
+  includes (add an endpoint, add a model and migration, add a scheduled job,
+  protect an endpoint, change the stack). Skills ride
+  `aegis add`/`remove`/`update`, so pre-skills projects gain them on update.
+  The framework repo itself carries contributor workflow skills
+  (add-service, add-component, i18n, release, template-dev) with a slimmed
+  CLAUDE.md.
 - **Windows-friendly dev commands**: generated projects now ship a
   `[tool.poe.tasks]` table (via `poethepoet`) covering the `Makefile`
   workflow, so `uv run poe <target>` (e.g. `uv run poe serve`, `uv run poe
@@ -18,6 +57,35 @@
   port-resolution scripts are replaced by a single Python implementation
   (`scripts/resolve_ports.py`, `scripts/dev_tasks.py`) shared by both
   interfaces.
+
+### Changed
+
+- **Connections tab redesign**: one card anatomy for every connection
+  (collapsible, dot-style status indicators matching the rest of the
+  Overseer, destructive actions behind a kebab menu), a fluid two-column
+  grid, a Connect menu on the Accounts sidebar and Connections tab, and in
+  sandbox mode a Plaid card with click-to-copy test credentials. The All
+  Accounts register now folds investment activity in with transactions.
+- **Disconnecting a provider connection is now instant**: local teardown
+  happens in the request; the provider-side revoke runs after the response
+  as a background task (it was always best-effort).
+- **Larger default Overseer cards**: component tiles get room to render
+  their metric grids cleanly at first paint. Thanks @GrCOTE7.
+
+### Fixed
+
+- **Second browser tab no longer renders blank**: the Overseer's route
+  reentrancy guard was process-wide, so two sessions routing at the same
+  instant (a second tab, a reconnect) blocked each other and the loser
+  never built its view. The guard is now session-scoped.
+- **Overseer modals no longer close on stray clicks**: detail popups are
+  explicit-close only (backdrop click-through is opt-in), and every modal's
+  Close is a themed button.
+- **Finance provider syncs can no longer erase catalog data**: partial
+  payloads (e.g. an activities row without pricing) update only the fields
+  they carry, and the destructive SnapTrade delete-and-re-register recovery
+  is gated on the specific "user already exists" error code instead of any
+  failure. An undecryptable stored credential no longer blocks disconnect.
 
 ## [0.9.1] - 2026-07-12
 
