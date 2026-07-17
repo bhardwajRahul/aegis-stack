@@ -73,9 +73,15 @@ Gate-relevant files (read, not edited, unless a gate fails):
    local wheel.
 8. If the rc verification finds a problem, fix it, bump to the next rc number
    (never reuse or re-tag a burned rc, see Pitfalls), and repeat from step 5.
-9. Once an rc is clean, tag the same commit for the real release: `git tag
-   vX.Y.Z && git push origin vX.Y.Z`. This publishes to PyPI and drafts a
-   GitHub release.
+9. Once an rc is clean, bump the version string from `X.Y.ZrcN` to the bare
+   `X.Y.Z` in `aegis/__init__.py`, `pyproject.toml`, and `copier.yml` (the
+   changelog section heading already says `X.Y.Z` from the cut; refresh
+   `uv.lock` via `uv lock`), commit, and tag THAT
+   commit: `git tag vX.Y.Z && git push origin vX.Y.Z`. Do not tag the rc
+   commit itself: the publish workflow builds whatever version
+   `pyproject.toml` carries, so tagging the rc commit as `vX.Y.Z` would
+   publish an `X.Y.ZrcN` wheel under a final tag. This publishes to PyPI
+   and drafts a GitHub release.
 10. Post-publish, repeat the TestPyPI-style upgrade recipe once more against
     the now-published PyPI package (init the previous release, `update` to
     the new version) and grep the resulting project for conflict markers to
