@@ -8,7 +8,7 @@ Money fields are integer minor units (cents); the frontend formats them.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
         FinanceImportBatch,
         FinanceImportBatchRow,
         FinanceInsight,
+        FinanceLiabilityDetail,
         FinanceNetWorthSnapshot,
         FinanceRecurringStream,
         FinanceSecurity,
@@ -32,6 +33,33 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Responses
 # ---------------------------------------------------------------------------
+
+
+class LiabilitySummary(BaseModel):
+    """Credit-account liability detail (statement/payment/APR). Present on an
+    account only when the institution reports it — absent fields stay None."""
+
+    last_statement_balance: int | None = None
+    last_statement_issue_date: date | None = None
+    minimum_payment_amount: int | None = None
+    next_payment_due_date: date | None = None
+    last_payment_amount: int | None = None
+    last_payment_date: date | None = None
+    is_overdue: bool | None = None
+    aprs: list[Any] = Field(default_factory=list)
+
+    @classmethod
+    def from_row(cls, row: FinanceLiabilityDetail) -> LiabilitySummary:
+        return cls(
+            last_statement_balance=row.last_statement_balance,
+            last_statement_issue_date=row.last_statement_issue_date,
+            minimum_payment_amount=row.minimum_payment_amount,
+            next_payment_due_date=row.next_payment_due_date,
+            last_payment_amount=row.last_payment_amount,
+            last_payment_date=row.last_payment_date,
+            is_overdue=row.is_overdue,
+            aprs=row.aprs or [],
+        )
 
 
 class AccountResponse(BaseModel):
@@ -50,10 +78,15 @@ class AccountResponse(BaseModel):
     is_manual: bool
     institution_id: int | None = None
     connection_id: int | None = None
+    liability: LiabilitySummary | None = None
 
     @classmethod
     def from_row(
-        cls, row: FinanceAccount, *, activity_balance: int = 0
+        cls,
+        row: FinanceAccount,
+        *,
+        activity_balance: int = 0,
+        liability: FinanceLiabilityDetail | None = None,
     ) -> AccountResponse:
         return cls(
             id=row.id,
@@ -66,6 +99,11 @@ class AccountResponse(BaseModel):
             is_manual=row.is_manual,
             institution_id=row.institution_id,
             connection_id=row.connection_id,
+            liability=(
+                LiabilitySummary.from_row(liability)
+                if liability is not None
+                else None
+            ),
         )
 
 

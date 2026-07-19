@@ -143,13 +143,19 @@ async def list_accounts(
         page_size=page_size,
     )
     # Scope the balance aggregate to just this page's accounts.
+    page_ids = [account.id for account in accounts]
     totals = await service.account_transaction_totals(
         owner_user_id=owner_user_id,
-        account_ids=[account.id for account in accounts],
+        account_ids=page_ids,
     )
+    liabilities = await service.liability_details(page_ids)
     return AccountListResponse(
         items=[
-            AccountResponse.from_row(a, activity_balance=totals.get(a.id, 0))
+            AccountResponse.from_row(
+                a,
+                activity_balance=totals.get(a.id, 0),
+                liability=liabilities.get(a.id),
+            )
             for a in accounts
         ],
         total=total,
@@ -868,15 +874,64 @@ async def plaid_webhook(
     request: Request,
     service: FinanceService = Depends(get_finance_service),
 ) -> dict[str, str]:
-    """Inbound Plaid webhook (real-time nudge). Unauthenticated — Plaid calls it
-    and the body's ``item_id`` scopes it to a connection. On a TRANSACTIONS
-    update we sync that item; the sync is idempotent so re-delivery is safe.
-    (Plaid-Verification JWT checking is a production hardening step.)"""
+    """Inbound Plaid webhook (real-time nudge). Unauthenticated but VERIFIED:
+    the ``Plaid-Verification`` ES256 JWT must sign the raw body, or the request
+    is rejected before anything touches the database. Verified deliveries are
+    logged idempotently; a TRANSACTIONS update syncs its item, ITEM lifecycle
+    codes flip the connection's health."""
     from app.services.finance import connection_service
+    from app.services.finance.providers.plaid import PlaidClient, PlaidError
 
-    payload = await request.json()
-    result = await connection_service.process_plaid_webhook(service.db, payload)
+    verification_jwt = request.headers.get("Plaid-Verification")
+    if not verification_jwt:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Plaid-Verification header",
+        )
+    raw_body = await request.body()
+    client = PlaidClient()
+    try:
+        payload = await client.verify_webhook(raw_body, verification_jwt)
+    except PlaidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Webhook verification failed: {exc}",
+        ) from None
+    result = await connection_service.process_plaid_webhook(
+        service.db, payload, client=client
+    )
     return {"status": result}
+
+
+@router.post(
+    "/connections/{connection_id}/relink", response_model=HostedLinkResponse
+)
+async def relink_connection(
+    connection_id: int,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> HostedLinkResponse:
+    """Update-mode Hosted Link to re-authenticate a connection flagged
+    ``needs_user_action``; the next successful sync returns it to healthy."""
+    from app.services.finance import connection_service
+    from app.services.finance.providers.plaid import PlaidError
+
+    try:
+        session = await connection_service.relink_connection(
+            service.db, connection_id, owner_user_id=owner_user_id
+        )
+    except PlaidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found"
+        )
+    hosted_link_url, link_token = session
+    return HostedLinkResponse(
+        hosted_link_url=hosted_link_url, link_token=link_token
+    )
 {%- endif %}
 {%- if finance_snaptrade %}
 

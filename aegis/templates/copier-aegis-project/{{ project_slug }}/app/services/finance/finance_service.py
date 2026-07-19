@@ -34,6 +34,7 @@ from app.services.finance.models import (
     FinanceImportBatchRow,
     FinanceInsight,
     FinanceInstitution,
+    FinanceLiabilityDetail,
     FinanceRecurringStream,
     FinanceSecurity,
     FinanceSecurityPrice,
@@ -311,6 +312,8 @@ class FinanceService:
         category_id: int | None = None,
         category_source: str = "unset",
         is_split: bool = False,
+        pending: bool = False,
+        pending_provider_id: str | None = None,
     ) -> FinanceTransaction:
         txn = FinanceTransaction(
             owner_user_id=owner_user_id,
@@ -334,6 +337,9 @@ class FinanceService:
             category_id=category_id,
             category_source=category_source,
             is_split=is_split,
+            pending=pending,
+            pending_provider_id=pending_provider_id,
+            status="pending" if pending else "posted",
         )
         self.db.add(txn)
         await self.db.flush()
@@ -722,6 +728,26 @@ class FinanceService:
             .limit(page_size)
         )
         return list((await self.db.exec(query_obj)).all()), total
+
+    async def liability_details(
+        self, account_ids: list[int]
+    ) -> dict[int, FinanceLiabilityDetail]:
+        """Liability rows for a page of accounts, keyed by account id.
+
+        One ``IN`` query — never one per account. Accounts without a row
+        (manual, or AMEX-style institutions that report nothing) are simply
+        absent from the map.
+        """
+        if not account_ids:
+            return {}
+        rows = (
+            await self.db.exec(
+                select(FinanceLiabilityDetail).where(
+                    FinanceLiabilityDetail.account_id.in_(account_ids)
+                )
+            )
+        ).all()
+        return {row.account_id: row for row in rows}
 
     async def account_transaction_totals(
         self,

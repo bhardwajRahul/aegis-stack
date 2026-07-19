@@ -429,6 +429,12 @@ class Settings(
 {% if include_finance %}
     # Finance Service Configuration
     FINANCE_DEFAULT_CURRENCY: str = "usd"
+    # Provider capabilities built into this stack. Credentials are set
+    # separately in .env; these flags say which connect flows exist at all,
+    # so the UI can offer them (and prompt for missing credentials) rather
+    # than hide the feature on a fresh project.
+    FINANCE_PLAID: bool = {% if finance_plaid %}True{% else %}False{% endif %}
+    FINANCE_SNAPTRADE: bool = {% if finance_snaptrade %}True{% else %}False{% endif %}
 {%- if finance_plaid %}
     # Plaid (bank/credit/investment linking). Sign up at
     # https://dashboard.plaid.com; sandbox keys work with no approval.
@@ -437,6 +443,10 @@ class Settings(
     PLAID_ENV: str = "sandbox"  # sandbox | production
     PLAID_WEBHOOK_URL: str | None = None
     PLAID_REDIRECT_URI: str | None = None
+    # Set by the dev compose overlay: the cloudflared quick-tunnel sidecar's
+    # metrics address. When present, the backend discovers the tunnel's public
+    # hostname at startup and routes Plaid webhooks through it.
+    PLAID_TUNNEL_METRICS_URL: str | None = None
 {%- endif %}
 {%- if finance_snaptrade %}
     # SnapTrade (brokerage linking — the Fidelity path). Application-gated.

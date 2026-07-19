@@ -17,6 +17,7 @@ from the frontend). All colours, spacing, and type come from ``AegisTheme``.
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from datetime import date
 
 import flet as ft
 
@@ -139,6 +140,24 @@ def _usd(cents: int | None) -> str:
 def _qty(shares: float | None) -> str:
     """Format a share quantity, trimming trailing zeros (10, 2.5, 0.125)."""
     return f"{float(shares or 0):g}"
+
+
+def _liability_line(account: dict) -> str | None:
+    """Statement line under credit accounts ("Due Jul 15 · min $35.00").
+
+    None when the institution reports nothing (the AMEX case) — the row then
+    renders exactly as before, no empty widget.
+    """
+    liability = account.get("liability") or {}
+    parts: list[str] = []
+    due = liability.get("next_payment_due_date")
+    if due:
+        due_date = date.fromisoformat(due)
+        parts.append(f"Due {due_date.strftime('%b')} {due_date.day}")
+    minimum = liability.get("minimum_payment_amount")
+    if minimum is not None:
+        parts.append(f"min {_usd(minimum)}")
+    return " · ".join(parts) if parts else None
 
 
 def _account_display_balance(account: dict) -> int:
@@ -370,17 +389,22 @@ def _connect_menu(items: list[ft.PopupMenuItem]) -> ft.PopupMenuButton:
 
 
 def _build_connect_menu(on_bank, on_brokerage) -> ft.PopupMenuButton | None:
-    """The provider Connect menu, with each item gated on its provider being
-    configured. ``None`` when no provider is configured. Shared by the
-    Accounts sidebar and the Connections tab header."""
+    """The provider Connect menu, shared by the Accounts sidebar and the
+    Connections tab header.
+
+    Items appear whenever the provider capability is built into the stack
+    (``settings.FINANCE_PLAID`` / ``FINANCE_SNAPTRADE``), not when
+    credentials are set: hiding the menu on a fresh project with an empty
+    ``.env`` made the feature's front door invisible. Missing credentials
+    fail helpfully at click time instead (see the connect flows)."""
     items: list[ft.PopupMenuItem] = []
-    if getattr(settings, "PLAID_CLIENT_ID", None):
+    if settings.FINANCE_PLAID:
         items.append(
             ActionMenuItem(
                 "Connect a bank", ft.Icons.ACCOUNT_BALANCE_OUTLINED, on_bank
             )
         )
-    if getattr(settings, "SNAPTRADE_CLIENT_ID", None):
+    if settings.FINANCE_SNAPTRADE:
         items.append(
             ActionMenuItem("Connect a brokerage", ft.Icons.SHOW_CHART, on_brokerage)
         )
@@ -394,6 +418,12 @@ async def _connect_bank_flow(
     poll server-side (~2.5 min) and reload the caller's view when the
     connection lands. (In sandbox mode the test credentials live on the
     Connections tab's Plaid card.)"""
+    if not (settings.PLAID_CLIENT_ID and settings.PLAID_SECRET):
+        ErrorSnackBar(
+            "Plaid isn't configured yet: set PLAID_CLIENT_ID and PLAID_SECRET "
+            "in .env, then restart."
+        ).launch(page)
+        return
     from app.components.frontend.state.session_state import get_session_state
 
     api = get_session_state(page).api_client
@@ -428,6 +458,12 @@ async def _connect_brokerage_flow(
     """SnapTrade connection portal: open it in a new tab, then poll
     server-side (~2.5 min) until the new authorization lands and reload the
     caller's view."""
+    if not (settings.SNAPTRADE_CLIENT_ID and settings.SNAPTRADE_CONSUMER_KEY):
+        ErrorSnackBar(
+            "SnapTrade isn't configured yet: set SNAPTRADE_CLIENT_ID and "
+            "SNAPTRADE_CONSUMER_KEY in .env, then restart."
+        ).launch(page)
+        return
     from app.components.frontend.state.session_state import get_session_state
 
     api = get_session_state(page).api_client
@@ -566,6 +602,7 @@ class AccountsSidebar(ft.Container):
         *,
         indent: int = Theme.Spacing.MD,
         bold: bool = False,
+        subtitle: str | None = None,
     ) -> ft.Container:
         name = ft.Text(
             label,
@@ -574,8 +611,27 @@ class AccountsSidebar(ft.Container):
             weight=ft.FontWeight.W_600 if bold else ft.FontWeight.W_400,
             no_wrap=True,
             overflow=ft.TextOverflow.ELLIPSIS,
-            expand=True,
         )
+        left: ft.Control
+        if subtitle:
+            left = ft.Column(
+                [
+                    name,
+                    ft.Text(
+                        subtitle,
+                        size=Theme.Typography.CAPTION,
+                        color=Theme.Colors.TEXT_SECONDARY,
+                        no_wrap=True,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                    ),
+                ],
+                spacing=1,
+                expand=True,
+                horizontal_alignment=ft.CrossAxisAlignment.START,
+            )
+        else:
+            name.expand = True
+            left = name
         bal = ft.Text(
             _usd(balance) if balance is not None else "",
             size=Theme.Typography.BODY_SMALL,
@@ -583,7 +639,7 @@ class AccountsSidebar(ft.Container):
             font_family="monospace",
         )
         row = ft.Container(
-            content=ft.Row([name, bal], spacing=Theme.Spacing.MD),
+            content=ft.Row([left, bal], spacing=Theme.Spacing.MD),
             padding=ft.padding.only(
                 left=indent,
                 right=Theme.Spacing.MD,
@@ -646,6 +702,7 @@ class AccountsSidebar(ft.Container):
                         account["id"],
                         account.get("name", ""),
                         _account_display_balance(account),
+                        subtitle=_liability_line(account),
                     )
                 )
         if self._list.page is not None:
@@ -1715,10 +1772,7 @@ class ConnectionsTab(ft.Container):
         # Sandbox helper rides the same grid as the provider cards, styled
         # identically, so the Plaid test credentials are always reachable
         # while a hosted connect screen is asking for them.
-        if (
-            getattr(settings, "PLAID_CLIENT_ID", None)
-            and getattr(settings, "PLAID_ENV", "sandbox") == "sandbox"
-        ):
+        if settings.FINANCE_PLAID and settings.PLAID_ENV == "sandbox":
             cards.append(_plaid_sandbox_card(self.page))
 
         self._body.controls.clear()
