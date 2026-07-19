@@ -71,6 +71,86 @@ class TestSync:
             result = runner.invoke(app, ["sync"])
         assert result.exit_code == 0
         assert "No provider connections" in result.output
+
+    def test_sync_single_connection(self) -> None:
+        _session, cm = _fake_session_cm()
+        mock_one = AsyncMock(return_value=_sync_result())
+        with (
+            patch("app.core.db.get_async_session", new=cm),
+            patch(
+                "app.services.finance.connection_service.sync_one_connection",
+                new=mock_one,
+            ),
+        ):
+            result = runner.invoke(app, ["sync", "--connection-id", "7"])
+        assert result.exit_code == 0
+        assert "Connection #7" in result.output
+        assert mock_one.await_args.args[1] == 7
+
+    def test_sync_single_connection_not_found_exits_nonzero(self) -> None:
+        _session, cm = _fake_session_cm()
+        with (
+            patch("app.core.db.get_async_session", new=cm),
+            patch(
+                "app.services.finance.connection_service.sync_one_connection",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            result = runner.invoke(app, ["sync", "--connection-id", "42"])
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+{%- if finance_plaid %}
+
+
+class TestFireWebhook:
+    def test_fires_and_reports_each_connection(self) -> None:
+        _session, cm = _fake_session_cm()
+        mock_fire = AsyncMock(return_value=[7])
+        with (
+            patch("app.core.db.get_async_session", new=cm),
+            patch(
+                "app.services.finance.connection_service.fire_sandbox_webhook",
+                new=mock_fire,
+            ),
+        ):
+            result = runner.invoke(app, ["fire-webhook", "--owner-user-id", "1"])
+        assert result.exit_code == 0
+        assert "connection #7" in result.output
+        assert mock_fire.await_args.kwargs["owner_user_id"] == 1
+        assert mock_fire.await_args.kwargs["webhook_code"] == (
+            "SYNC_UPDATES_AVAILABLE"
+        )
+
+    def test_no_connections_is_a_noop(self) -> None:
+        _session, cm = _fake_session_cm()
+        with (
+            patch("app.core.db.get_async_session", new=cm),
+            patch(
+                "app.services.finance.connection_service.fire_sandbox_webhook",
+                new=AsyncMock(return_value=[]),
+            ),
+        ):
+            result = runner.invoke(app, ["fire-webhook"])
+        assert result.exit_code == 0
+        assert "No Plaid connections" in result.output
+
+    def test_provider_error_maps_to_exit_1(self) -> None:
+        from app.services.finance.providers.plaid import PlaidError
+
+        _session, cm = _fake_session_cm()
+        with (
+            patch("app.core.db.get_async_session", new=cm),
+            patch(
+                "app.services.finance.connection_service.fire_sandbox_webhook",
+                new=AsyncMock(
+                    side_effect=PlaidError("sandbox_only", "not in sandbox")
+                ),
+            ),
+        ):
+            result = runner.invoke(app, ["fire-webhook"])
+        assert result.exit_code == 1
+        assert "sandbox_only" in result.output
+{%- endif %}
 {%- if finance_snaptrade %}
 
 

@@ -233,6 +233,12 @@ async def async_engine():
 
     @event.listens_for(engine.sync_engine, "connect")
     def attach_schemas(dbapi_connection: Any, connection_record: Any) -> None:
+        # Match production transaction handling: pysqlite's implicit
+        # BEGIN/COMMIT sniffing commits the open transaction before SAVEPOINT,
+        # which both breaks begin_nested() semantics and leaks rows across the
+        # per-test rollback isolation. Take over transaction control (paired
+        # with the "begin" listener below).
+        dbapi_connection.isolation_level = None
         cursor = dbapi_connection.cursor()
         # Match the sync engine: enforce foreign keys so async tests catch
         # FK violations that would otherwise pass here but fail in production.
@@ -240,6 +246,10 @@ async def async_engine():
         for schema_name in schema_names:
             cursor.execute(f"ATTACH DATABASE ':memory:' AS {schema_name}")
         cursor.close()
+
+    @event.listens_for(engine.sync_engine, "begin")
+    def emit_begin(conn: Any) -> None:
+        conn.exec_driver_sql("BEGIN")
 
     # Create all tables once per test session
     async with engine.begin() as conn:

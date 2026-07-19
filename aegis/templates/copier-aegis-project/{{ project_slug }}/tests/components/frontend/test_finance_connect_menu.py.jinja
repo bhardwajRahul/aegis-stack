@@ -1,0 +1,61 @@
+{%- if include_finance %}
+"""The finance Connect menu gates on built-in provider capability, not on
+credentials.
+
+Regression: the menu used to appear only when credentials were set, so a
+fresh project with an empty ``.env`` showed no way to connect a provider at
+all - the feature's front door was invisible. It must show whenever a
+provider is built into the stack; missing credentials are handled at click
+time by the connect flow instead.
+"""
+
+from unittest.mock import patch
+
+from app.components.frontend.dashboard.modals import finance_modal
+
+
+def _noop(_e: object) -> None:
+    return None
+
+
+def _menu_labels(menu) -> list[str]:
+    if menu is None:
+        return []
+    labels: list[str] = []
+    for item in menu.items:
+        # ActionMenuItem wraps a Row(Icon, Text); pull the text value.
+        for control in item.content.controls:
+            if hasattr(control, "value"):
+                labels.append(control.value)
+    return labels
+
+
+def test_menu_shows_built_in_providers_without_credentials() -> None:
+    with patch.object(finance_modal.settings, "FINANCE_PLAID", True, create=True), \
+        patch.object(
+            finance_modal.settings, "FINANCE_SNAPTRADE", True, create=True
+        ):
+        menu = finance_modal._build_connect_menu(_noop, _noop)
+    labels = _menu_labels(menu)
+    assert "Connect a bank" in labels
+    assert "Connect a brokerage" in labels
+
+
+def test_menu_omits_providers_not_built_in() -> None:
+    with patch.object(finance_modal.settings, "FINANCE_PLAID", True, create=True), \
+        patch.object(
+            finance_modal.settings, "FINANCE_SNAPTRADE", False, create=True
+        ):
+        menu = finance_modal._build_connect_menu(_noop, _noop)
+    labels = _menu_labels(menu)
+    assert labels == ["Connect a bank"]
+
+
+def test_no_menu_when_no_provider_built_in() -> None:
+    with patch.object(finance_modal.settings, "FINANCE_PLAID", False, create=True), \
+        patch.object(
+            finance_modal.settings, "FINANCE_SNAPTRADE", False, create=True
+        ):
+        menu = finance_modal._build_connect_menu(_noop, _noop)
+    assert menu is None
+{%- endif %}

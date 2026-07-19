@@ -20,6 +20,8 @@ Writes but does not commit — the caller owns the transaction.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
@@ -28,6 +30,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -39,6 +42,8 @@ from app.services.finance.finance_service import FinanceService
 from app.services.finance.models import (
     FinanceAccount,
     FinanceConnection,
+    FinanceImportBatch,
+    FinanceLiabilityDetail,
     FinanceTransaction,
     FinanceWebhookEvent,
 )
@@ -258,6 +263,7 @@ async def _apply_transactions(
     account_by_plaid_id: dict[str, int],
     *,
     connection: FinanceConnection,
+    import_batch_id: int | None = None,
 ) -> tuple[int, int]:
     """Insert new / reconcile Plaid transactions. Returns (added, reconciled).
 
@@ -320,16 +326,39 @@ async def _apply_transactions(
             ] += 1
 
     added = reconciled = 0
+    # Posted rows referencing an earlier pre-auth (Plaid's id in
+    # ``pending_transaction_id``) collapse after the loop, once every row of
+    # the batch — including a same-batch pending sibling — is in ``lane1``.
+    collapse: list[tuple[int, str, FinanceTransaction]] = []
     for account_id, txn, amount, name, txn_date in prepared:
         external_id = txn["transaction_id"]
+        pending = bool(txn.get("pending"))
+        pending_provider_id = txn.get("pending_transaction_id")
+        pfc = txn.get("personal_finance_category") or {}
         existing = lane1.get((account_id, external_id))
         if existing is not None:  # same Item re-sync -> update in place
             existing.amount = amount
             existing.name = name
             existing.date_ = txn_date
+            existing.pending = pending
+            if existing.status != "removed":
+                existing.status = "pending" if pending else "posted"
+            if pending_provider_id:
+                existing.pending_provider_id = pending_provider_id
+            # Category precedence: provider < rule < user. A provider refresh
+            # (modified[]) never clobbers a rule- or user-assigned category.
+            if pfc.get("primary") and existing.category_source in (
+                "provider",
+                "unset",
+            ):
+                category = await service.get_or_create_pfc_category(pfc["primary"])
+                existing.category_id = category.id
+                existing.category_source = "provider"
             db.add(existing)
             await db.flush()
             reconciled += 1
+            if not pending and pending_provider_id:
+                collapse.append((account_id, pending_provider_id, existing))
             continue
         content_key = (account_id, txn_date, amount, normalize_payee(name or ""))
         if other_content.get(content_key, 0) > 0:  # re-link: already stored
@@ -337,12 +366,11 @@ async def _apply_transactions(
             reconciled += 1
             continue
 
-        pfc = txn.get("personal_finance_category") or {}
         category_id: int | None = None
         if pfc.get("primary"):
             category = await service.get_or_create_pfc_category(pfc["primary"])
             category_id = category.id
-        await service.create_transaction(
+        created = await service.create_transaction(
             owner_user_id=connection.owner_user_id,
             account_id=account_id,
             connection_id=connection.id,
@@ -356,24 +384,152 @@ async def _apply_transactions(
             original_description=txn.get("name"),
             category_id=category_id,
             category_source="provider" if pfc.get("primary") else "unset",
+            pending=pending,
+            pending_provider_id=pending_provider_id,
+            import_batch_id=import_batch_id,
         )
+        lane1[(account_id, external_id)] = created
         added += 1
+        if not pending and pending_provider_id:
+            collapse.append((account_id, pending_provider_id, created))
+
+    # Pending -> posted: link the posted row to its pre-auth via the self-FK
+    # and tombstone the pre-auth so exactly one row stays visible.
+    now = _utcnow()
+    for account_id, plaid_pending_id, posted in collapse:
+        pending_row = lane1.get((account_id, plaid_pending_id))
+        if (
+            pending_row is None
+            or pending_row.id == posted.id
+            or pending_row.deleted_at is not None
+        ):
+            continue
+        posted.pending_transaction_id = pending_row.id
+        pending_row.deleted_at = now
+        db.add(posted)
+        db.add(pending_row)
+    if collapse:
+        await db.flush()
     return added, reconciled
 
 
-async def _remove_transactions(db: AsyncSession, removed: list[dict[str, Any]]) -> int:
-    count = 0
-    for item in removed:
-        txn = (
+def _pct_to_bps(pct: float | None) -> int | None:
+    return int(round(pct * 100)) if pct is not None else None
+
+
+async def _apply_liabilities(
+    db: AsyncSession,
+    liabilities: dict[str, Any],
+    account_by_plaid_id: dict[str, int],
+    *,
+    owner_user_id: int | None,
+) -> int:
+    """Upsert credit-lane liability detail, 1:1 per account, ever.
+
+    Money lands as int cents, APRs as basis points (int) — no floats stored.
+    Fields the institution doesn't report (the AMEX case) stay NULL.
+    """
+    entries = liabilities.get("credit") or []
+    if not entries:
+        return 0
+    touched = [
+        account_by_plaid_id[e["account_id"]]
+        for e in entries
+        if e.get("account_id") in account_by_plaid_id
+    ]
+    existing_by_account = {
+        row.account_id: row
+        for row in (
             await db.exec(
-                select(FinanceTransaction).where(
-                    FinanceTransaction.source == Provider.PLAID,
-                    FinanceTransaction.external_id == item["transaction_id"],
+                select(FinanceLiabilityDetail).where(
+                    FinanceLiabilityDetail.account_id.in_(touched)
                 )
             )
-        ).first()
+        ).all()
+    }
+    written = 0
+    for entry in entries:
+        account_id = account_by_plaid_id.get(entry.get("account_id"))
+        if account_id is None:
+            continue
+        detail = existing_by_account.get(account_id)
+        if detail is None:
+            detail = FinanceLiabilityDetail(
+                owner_user_id=owner_user_id, account_id=account_id
+            )
+        detail.liability_type = "credit"
+        detail.last_statement_balance = _to_cents(
+            entry.get("last_statement_balance")
+        )
+        raw_issue = entry.get("last_statement_issue_date")
+        detail.last_statement_issue_date = (
+            date.fromisoformat(raw_issue) if raw_issue else None
+        )
+        detail.last_payment_amount = _to_cents(entry.get("last_payment_amount"))
+        raw_paid = entry.get("last_payment_date")
+        detail.last_payment_date = (
+            date.fromisoformat(raw_paid) if raw_paid else None
+        )
+        detail.minimum_payment_amount = _to_cents(
+            entry.get("minimum_payment_amount")
+        )
+        raw_due = entry.get("next_payment_due_date")
+        detail.next_payment_due_date = (
+            date.fromisoformat(raw_due) if raw_due else None
+        )
+        detail.is_overdue = entry.get("is_overdue")
+        detail.aprs = [
+            {
+                "apr_type": apr.get("apr_type"),
+                "apr_percentage_bps": _pct_to_bps(apr.get("apr_percentage")),
+                "balance_subject_to_apr": _to_cents(
+                    apr.get("balance_subject_to_apr")
+                ),
+                "interest_charge_amount": _to_cents(
+                    apr.get("interest_charge_amount")
+                ),
+            }
+            for apr in entry.get("aprs") or []
+        ]
+        detail.raw = entry
+        detail.updated_at = _utcnow()
+        db.add(detail)
+        written += 1
+    await db.flush()
+    return written
+
+
+async def _remove_transactions(
+    db: AsyncSession,
+    removed: list[dict[str, Any]],
+    account_by_plaid_id: dict[str, int],
+) -> int:
+    """Tombstone retracted transactions (phantom pre-auths, bank deletions).
+
+    Soft-delete only — the tombstone (``is_removed``/``removed_at``/``status``)
+    must survive re-syncs so a replayed page can't resurrect the row. Scoped to
+    the account the removed[] entry names when Plaid provides it.
+    """
+    count = 0
+    now = _utcnow()
+    for item in removed:
+        conditions = [
+            FinanceTransaction.source == Provider.PLAID,
+            FinanceTransaction.external_id == item["transaction_id"],
+            FinanceTransaction.deleted_at.is_(None),
+        ]
+        plaid_account_id = item.get("account_id")
+        account_id = (
+            account_by_plaid_id.get(plaid_account_id) if plaid_account_id else None
+        )
+        if account_id is not None:
+            conditions.append(FinanceTransaction.account_id == account_id)
+        txn = (await db.exec(select(FinanceTransaction).where(*conditions))).first()
         if txn is not None:
-            txn.deleted_at = _utcnow()
+            txn.is_removed = True
+            txn.removed_at = now
+            txn.status = "removed"
+            txn.deleted_at = now
             db.add(txn)
             count += 1
     return count
@@ -635,13 +791,32 @@ async def sync_plaid_connection(
     # Collect every page first so within-day ordinals span the full set (they
     # must be stable for the LANE-2 re-link dedup to line up).
     collected: list[dict[str, Any]] = []
+    removed: list[dict[str, Any]] = []
+    cursor_before = cursor
     while True:
         page = await client.sync_transactions(access_token, cursor)
         collected.extend(page.get("added", []) + page.get("modified", []))
-        result.removed += await _remove_transactions(db, page.get("removed", []))
+        removed.extend(page.get("removed", []))
         cursor = page.get("next_cursor")
         if not page.get("has_more"):
             break
+
+    # Audit trail: one finance_import_batch row per sync pass, carrying the
+    # cursor window it applied. Committed only after every row lands, so the
+    # session's single commit keeps batch, rows, and cursor advance atomic.
+    batch = FinanceImportBatch(
+        owner_user_id=(
+            0 if connection.owner_user_id is None else connection.owner_user_id
+        ),
+        connection_id=connection.id,
+        source_type="plaid_sync",
+        sync_cursor_before=cursor_before,
+        status="processing",
+        rows_total=len(collected) + len(removed),
+        started_at=_utcnow(),
+    )
+    db.add(batch)
+    await db.flush()
 
     result.added, result.updated = await _apply_transactions(
         db,
@@ -649,7 +824,39 @@ async def sync_plaid_connection(
         collected,
         account_by_plaid_id,
         connection=connection,
+        import_batch_id=batch.id,
     )
+    # Removals apply last: a row added on an early page and retracted on a
+    # later one (phantom pre-auth) must end tombstoned, not re-inserted.
+    result.removed = await _remove_transactions(db, removed, account_by_plaid_id)
+
+    batch.sync_cursor_after = cursor
+    batch.rows_inserted = result.added
+    batch.rows_updated = result.updated
+    batch.status = "committed"
+    batch.finished_at = _utcnow()
+    db.add(batch)
+
+    # Liability detail (credit APR/statement/min-payment) — capability-gated
+    # on the item's products, so institutions without it (the AMEX case) get
+    # ZERO extra API calls, zero rows, zero errors.
+    item_products = set(
+        (item.get("products") or [])
+        + (item.get("billed_products") or [])
+        + (item.get("available_products") or [])
+    )
+    if "liabilities" in item_products:
+        try:
+            plaid_liabilities = await client.get_liabilities(access_token)
+        except PlaidError:
+            plaid_liabilities = {}
+        if plaid_liabilities:
+            await _apply_liabilities(
+                db,
+                plaid_liabilities,
+                account_by_plaid_id,
+                owner_user_id=connection.owner_user_id,
+            )
 
     connection.sync_cursor = cursor
     connection.status = "healthy"
@@ -842,6 +1049,44 @@ async def _recompute_net_worth(
     await networth_service.recompute_snapshots(db, owner_user_id=owner_user_id)
 
 
+async def _sync_isolated(
+    db: AsyncSession,
+    connection: FinanceConnection,
+    sync: Callable[[], Awaitable[SyncResult]],
+) -> SyncResult | None:
+    """Run one connection's sync inside a SAVEPOINT.
+
+    A failure rolls back only that connection's partial writes (preserving the
+    all-or-nothing cursor invariant), marks the connection ``error`` with
+    detail, and returns None — one failing bank never kills the others.
+    """
+    connection_id = connection.id
+    try:
+        async with db.begin_nested():
+            result = await sync()
+    except Exception as exc:
+        logger.exception("Finance sync failed for connection %s", connection_id)
+        connection.status = "error"
+        connection.status_detail = str(exc)[:500]
+        connection.last_error_code = getattr(exc, "error_code", None)
+        connection.last_sync_attempt_at = _utcnow()
+        db.add(connection)
+        await db.flush()
+        return None
+    logger.info(
+        "Finance sync: connection %s -> %d account(s), +%d/%d/-%d txn(s), "
+        "%d holding(s), %d trade(s)",
+        connection_id,
+        result.accounts,
+        result.added,
+        result.updated,
+        result.removed,
+        result.holdings,
+        result.trades,
+    )
+    return result
+
+
 async def sync_owner_connections(
     db: AsyncSession,
     *,
@@ -849,36 +1094,90 @@ async def sync_owner_connections(
     client: PlaidClient | None = None,
     snaptrade_client: SnapTradeClient | None = None,
 ) -> list[SyncResult]:
-    """Sync every provider connection for an owner; returns one result each.
+    """Sync every healthy provider connection for an owner.
 
     Dispatches on ``connection.provider``. Provider clients are only
     constructed when a connection of that provider exists, so a
     single-provider deployment never touches the other's credentials/SDK.
+    Connections flagged ``needs_user_action`` are skipped (re-auth spam helps
+    nobody); per-connection failures are isolated in ``_sync_isolated`` and
+    absent from the returned results.
     """
     results: list[SyncResult] = []
-    plaid_connections = await list_plaid_connections(db, owner_user_id=owner_user_id)
+    plaid_connections = [
+        c
+        for c in await list_plaid_connections(db, owner_user_id=owner_user_id)
+        if not c.needs_user_action
+    ]
     if plaid_connections:
         client = client or PlaidClient()
         for connection in plaid_connections:
-            results.append(await sync_plaid_connection(db, connection, client=client))
+            result = await _sync_isolated(
+                db,
+                connection,
+                lambda c=connection: sync_plaid_connection(db, c, client=client),
+            )
+            if result is not None:
+                results.append(result)
     snaptrade_connections = [
         c
         for c in await list_provider_connections(
             db, provider=Provider.SNAPTRADE, owner_user_id=owner_user_id
         )
         # Rows still waiting on the portal (no authorization yet) can't sync.
-        if c.provider_item_id is not None
+        if c.provider_item_id is not None and not c.needs_user_action
     ]
     if snaptrade_connections:
         snaptrade_client = snaptrade_client or SnapTradeClient()
         for connection in snaptrade_connections:
-            results.append(
-                await sync_snaptrade_connection(
-                    db, connection, client=snaptrade_client
-                )
+            result = await _sync_isolated(
+                db,
+                connection,
+                lambda c=connection: sync_snaptrade_connection(
+                    db, c, client=snaptrade_client
+                ),
             )
+            if result is not None:
+                results.append(result)
     await _recompute_net_worth(db, owner_user_id, results)
     return results
+
+
+async def sync_one_connection(
+    db: AsyncSession,
+    connection_id: int,
+    *,
+    owner_user_id: int | None = None,
+    client: PlaidClient | None = None,
+    snaptrade_client: SnapTradeClient | None = None,
+) -> SyncResult | None:
+    """Targeted sync of a single connection — the CLI debugging tool.
+
+    Unlike the all-connections path this neither skips ``needs_user_action``
+    nor swallows provider errors: when debugging one bank, the caller wants
+    the real failure. Returns None when the connection is missing, foreign,
+    or not syncable (manual / portal-pending).
+    """
+    connection = await get_connection(
+        db, connection_id, owner_user_id=owner_user_id
+    )
+    if connection is None:
+        return None
+    if connection.provider == Provider.PLAID:
+        result = await sync_plaid_connection(
+            db, connection, client=client or PlaidClient()
+        )
+    elif (
+        connection.provider == Provider.SNAPTRADE
+        and connection.provider_item_id is not None
+    ):
+        result = await sync_snaptrade_connection(
+            db, connection, client=snaptrade_client or SnapTradeClient()
+        )
+    else:
+        return None
+    await _recompute_net_worth(db, connection.owner_user_id, [result])
+    return result
 
 
 async def complete_hosted_link(
@@ -906,32 +1205,70 @@ async def complete_hosted_link(
     return results
 
 
+# ITEM webhook codes that flip a connection into a needs-user-action state.
+_ITEM_WEBHOOK_STATUS = {
+    "PENDING_EXPIRATION": "pending_expiration",
+    "PENDING_DISCONNECT": "pending_disconnect",
+    "USER_PERMISSION_REVOKED": "revoked",
+}
+
+
+def _parse_consent_expiration(raw: str | None) -> datetime | None:
+    """Plaid's ISO-8601 consent deadline -> naive UTC (project convention)."""
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
+
+
 async def process_plaid_webhook(
     db: AsyncSession,
     payload: dict[str, Any],
     *,
     client: PlaidClient | None = None,
 ) -> str:
-    """Log an inbound Plaid webhook and, for transaction updates, sync the item
-    it names. Every webhook is recorded to ``finance_webhook_event`` (the replay
-    buffer); the sync itself is idempotent, so a re-delivered webhook is safe.
+    """Dispatch a VERIFIED inbound Plaid webhook (the route checks the
+    ``Plaid-Verification`` JWT before this runs).
 
-    Returns a short status: ``synced`` | ``ignored`` | ``unknown_item``.
+    Every first delivery is recorded to ``finance_webhook_event``; the
+    idempotency key (a content hash in ``provider_event_id`` — Plaid sends no
+    event id) makes a re-delivered webhook a logged-once no-op. TRANSACTIONS
+    updates sync the item; ITEM lifecycle codes flip the connection's health
+    (``needs_user_action`` drives the UI's amber chip and the relink flow).
+
+    Returns ``synced`` | ``processed`` | ``ignored`` | ``unknown_item`` |
+    ``duplicate``.
     """
     item_id = payload.get("item_id")
     webhook_type = payload.get("webhook_type")
+    provider_event_id = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
     event = FinanceWebhookEvent(
         provider=Provider.PLAID,
         provider_item_id=item_id,
         webhook_type=webhook_type,
         webhook_code=payload.get("webhook_code"),
+        provider_event_id=provider_event_id,
         payload=payload,
         status="received",
     )
-    db.add(event)
-    await db.flush()
+    # The unique constraint IS the dedup: inserting inside a SAVEPOINT means a
+    # re-delivered (or concurrently delivered) identical webhook rolls back
+    # just this insert and returns cleanly — no check-then-insert race.
+    try:
+        async with db.begin_nested():
+            db.add(event)
+            await db.flush()
+    except IntegrityError:
+        return "duplicate"
 
-    if webhook_type != "TRANSACTIONS":
+    if webhook_type not in ("TRANSACTIONS", "ITEM"):
         event.status = "ignored"
         return "ignored"
     connection = (
@@ -946,13 +1283,148 @@ async def process_plaid_webhook(
     if connection is None:
         event.status = "ignored"
         return "unknown_item"
+    event.connection_id = connection.id
+
+    if webhook_type == "ITEM":
+        code = payload.get("webhook_code")
+        if code == "ERROR":
+            error = payload.get("error") or {}
+            error_code = error.get("error_code")
+            connection.status = (
+                "login_required"
+                if error_code == "ITEM_LOGIN_REQUIRED"
+                else "error"
+            )
+            connection.needs_user_action = True
+            connection.last_error_code = error_code
+            connection.status_detail = error.get("error_message")
+        elif code in _ITEM_WEBHOOK_STATUS:
+            connection.status = _ITEM_WEBHOOK_STATUS[code]
+            connection.needs_user_action = True
+            if code == "PENDING_EXPIRATION":
+                connection.consent_expiration_at = _parse_consent_expiration(
+                    payload.get("consent_expiration_time")
+                )
+        else:
+            event.status = "ignored"
+            return "ignored"
+        db.add(connection)
+        event.status = "processed"
+        event.processed_at = _utcnow()
+        return "processed"
+
     result = await sync_plaid_connection(
         db, connection, client=client or PlaidClient()
     )
-    event.connection_id = connection.id
     event.status = "processed"
+    event.processed_at = _utcnow()
     await _recompute_net_worth(db, connection.owner_user_id, [result])
     return "synced"
+
+
+async def refresh_webhook_urls(
+    db: AsyncSession,
+    *,
+    webhook_url: str,
+    owner_user_id: int | None = None,
+    client: PlaidClient | None = None,
+) -> int:
+    """Point every Plaid Item at ``webhook_url`` via ``/item/webhook/update``.
+
+    Reconciles existing connections after the dev tunnel's public hostname
+    rotates (it changes on every ``docker compose up``). Per-item failures are
+    logged and skipped — one broken Item never blocks the rest. Returns the
+    number of items updated.
+    """
+    client = client or PlaidClient()
+    updated = 0
+    for connection in await list_plaid_connections(db, owner_user_id=owner_user_id):
+        if not connection.access_token_encrypted:
+            continue
+        access_token = decrypt_secret(
+            connection.access_token_encrypted, context=_ACCESS_TOKEN_CONTEXT
+        )
+        try:
+            await client.update_item_webhook(access_token, webhook_url)
+        except PlaidError as exc:
+            logger.warning(
+                "Webhook URL update failed for connection %s: %s",
+                connection.id,
+                exc,
+            )
+            continue
+        updated += 1
+    return updated
+
+
+async def fire_sandbox_webhook(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None = None,
+    connection_id: int | None = None,
+    webhook_code: str = "SYNC_UPDATES_AVAILABLE",
+    client: PlaidClient | None = None,
+) -> list[int]:
+    """Sandbox-only dev tool: have Plaid deliver a real signed webhook for
+    each (or one) Plaid connection, exercising PLAID_WEBHOOK_URL,
+    verification, and dispatch end to end. Returns the connection ids fired.
+    """
+    client = client or PlaidClient()
+    if client.environment != "sandbox":
+        raise PlaidError(
+            "sandbox_only",
+            "fire_sandbox_webhook only works with PLAID_ENV=sandbox.",
+        )
+    connections = await list_plaid_connections(db, owner_user_id=owner_user_id)
+    if connection_id is not None:
+        connections = [c for c in connections if c.id == connection_id]
+    fired: list[int] = []
+    for connection in connections:
+        if not connection.access_token_encrypted:
+            continue
+        access_token = decrypt_secret(
+            connection.access_token_encrypted, context=_ACCESS_TOKEN_CONTEXT
+        )
+        await client.fire_sandbox_webhook(access_token, webhook_code)
+        fired.append(connection.id)
+    return fired
+
+
+async def relink_connection(
+    db: AsyncSession,
+    connection_id: int,
+    *,
+    owner_user_id: int | None = None,
+    client: PlaidClient | None = None,
+) -> tuple[str, str] | None:
+    """Update-mode Hosted Link for a connection needing re-auth.
+
+    Returns ``(hosted_link_url, link_token)``, or None when the connection is
+    missing, another user's, not Plaid, or has no stored token. The access
+    token does not change in update mode; the next successful sync flips the
+    connection back to healthy and clears ``needs_user_action``.
+    """
+    connection = await get_connection(
+        db, connection_id, owner_user_id=owner_user_id
+    )
+    if (
+        connection is None
+        or connection.provider != Provider.PLAID
+        or not connection.access_token_encrypted
+    ):
+        return None
+    access_token = decrypt_secret(
+        connection.access_token_encrypted, context=_ACCESS_TOKEN_CONTEXT
+    )
+    client = client or PlaidClient()
+    return await client.create_hosted_link(
+        user_id=(
+            connection.owner_user_id
+            if connection.owner_user_id is not None
+            else "standalone"
+        ),
+        update_access_token=access_token,
+    )
 
 
 # --------------------------------------------------------------------------- #
