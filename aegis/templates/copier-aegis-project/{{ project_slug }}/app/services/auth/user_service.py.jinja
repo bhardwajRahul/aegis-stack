@@ -13,7 +13,12 @@ from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
 from app.services.auth.hooks import run_post_user_created
 {% if include_auth_org %}
-from app.models.org import OrganizationMember, OrgInvite
+from app.models.org import (
+    ORG_ROLE_OWNER,
+    Organization,
+    OrganizationMember,
+    OrgInvite,
+)
 {% endif %}
 from app.models.refresh_token import RefreshToken
 from app.models.user import EmailVerificationToken, PasswordResetToken, User, UserCreate
@@ -152,6 +157,9 @@ class UserService:
           (the invitee shouldn't be able to accept into an account
           that's been deactivated). Memberships are left in place so a
           restore can re-grant access without re-inviting.
+        - Soft-deletes any org the user solely owns (sole member + owner),
+          so the delete doesn't leave an orphan no one can remove. Shared
+          orgs are untouched. See issue #709.
 {%- endif %}
 
         Use ``hard_delete_user`` for permanent removal.
@@ -180,11 +188,66 @@ class UserService:
         await self.db.exec(
             delete(OrgInvite).where(OrgInvite.invited_by == user_id)
         )
+
+        # Cascade: soft-delete any org this user solely owns. Otherwise the
+        # delete orphans the org — its owner row tombstones and the owner-only
+        # delete path can never be satisfied again. See issue #709.
+        orphan_org_ids = await self.orphaned_sole_owner_org_ids(user_id)
+        if orphan_org_ids:
+            await self.db.exec(
+                update(Organization)
+                .where(
+                    Organization.id.in_(orphan_org_ids),
+                    Organization.deleted_at.is_(None),
+                )
+                .values(deleted_at=now)
+            )
 {%- endif %}
 
         await self.db.commit()
         return True
+{% if include_auth_org %}
+    async def orphaned_sole_owner_org_ids(
+        self, user_id: int, *, include_deleted: bool = False
+    ) -> list[int]:
+        """Org ids where ``user_id`` is the sole member and the owner.
 
+        Deleting the user would orphan these — the owner membership tombstones
+        and no one can remove the org through the owner-only delete path (issue
+        #709). Used to cascade their soft-delete in :meth:`delete_user` and to
+        emit the ``auth.org_deleted`` audit trail at the caller. Orgs with any
+        other member are excluded, so a user's departure never removes an org
+        other people still use.
+
+        By default only *live* orgs count; pass ``include_deleted=True`` so a
+        hard delete also purges an org that an earlier soft delete already
+        tombstoned.
+        """
+        owner_query = (
+            select(OrganizationMember.organization_id)
+            .join(
+                Organization,
+                Organization.id == OrganizationMember.organization_id,
+            )
+            .where(
+                OrganizationMember.user_id == user_id,
+                OrganizationMember.role == ORG_ROLE_OWNER,
+            )
+        )
+        if not include_deleted:
+            owner_query = owner_query.where(Organization.deleted_at.is_(None))
+        owned_org_ids = (await self.db.exec(owner_query)).all()
+        if not owned_org_ids:
+            return []
+        member_counts = (
+            await self.db.exec(
+                select(OrganizationMember.organization_id, func.count())
+                .where(OrganizationMember.organization_id.in_(owned_org_ids))
+                .group_by(OrganizationMember.organization_id)
+            )
+        ).all()
+        return [org_id for org_id, member_count in member_counts if member_count == 1]
+{% endif %}
     async def hard_delete_user(self, user_id: int) -> bool:
         """Permanently delete a user and every row that FKs to them.
 
@@ -205,6 +268,9 @@ class UserService:
 {%- if include_auth_org %}
         - ``organization_member`` (user_id)
         - ``org_invite`` (invited_by)
+        - any org the user solely owns, plus that org's remaining invites and
+          members (permanent counterpart of ``delete_user``'s cascade — a hard
+          delete must not leave an orphan behind either, issue #709)
 {%- endif %}
         """
         statement = select(User).where(User.id == user_id)
@@ -212,6 +278,15 @@ class UserService:
         user = result.first()
         if not user:
             return False
+{%- if include_auth_org %}
+
+        # Capture solo-owned orgs before their membership rows are deleted
+        # below. ``include_deleted`` so an org an earlier soft delete already
+        # tombstoned is purged too, not left as a dangling row.
+        orphan_org_ids = await self.orphaned_sole_owner_org_ids(
+            user_id, include_deleted=True
+        )
+{%- endif %}
 
         await self.db.exec(
             delete(RefreshToken).where(RefreshToken.user_id == user_id)
@@ -240,6 +315,23 @@ class UserService:
         await self.db.exec(
             delete(OrgInvite).where(OrgInvite.invited_by == user_id)
         )
+        # Purge the solo-owned orgs. Clear their remaining invites and members
+        # first so the FK to ``organization`` is satisfiable when the org rows
+        # go (both tables FK ``organization.id``).
+        if orphan_org_ids:
+            await self.db.exec(
+                delete(OrgInvite).where(
+                    OrgInvite.organization_id.in_(orphan_org_ids)
+                )
+            )
+            await self.db.exec(
+                delete(OrganizationMember).where(
+                    OrganizationMember.organization_id.in_(orphan_org_ids)
+                )
+            )
+            await self.db.exec(
+                delete(Organization).where(Organization.id.in_(orphan_org_ids))
+            )
 {% endif %}
         await self.db.delete(user)
         await self.db.commit()

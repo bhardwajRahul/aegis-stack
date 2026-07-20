@@ -19,6 +19,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.security import create_access_token
+from app.models.org import ORG_ROLE_OWNER
 from app.services.auth.membership_service import MembershipService
 
 
@@ -544,6 +545,99 @@ class TestOwnershipTransfer:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "yourself" in response.json()["detail"].lower()
+
+
+@pytest.mark.usefixtures("_enable_auth")
+class TestDeleteOrgAdminOverride:
+    """A global admin can delete any org; others still need owner (issue #709)."""
+
+    async def _make_admin_and_foreign_org(
+        self, db: AsyncSession, user_factory, org_factory
+    ):
+        """Global-admin user + an org owned by a *different*, non-admin user."""
+        admin = await user_factory()
+        admin.role = "admin"
+        db.add(admin)
+        await db.commit()
+        owner = await user_factory()
+        org = await org_factory()
+        await MembershipService(db).add_member(org.id, owner.id, role=ORG_ROLE_OWNER)
+        assert admin.role == "admin" and owner.role != "admin"
+        return admin, owner, org
+
+    @pytest.mark.asyncio
+    async def test_global_admin_can_delete_org_they_do_not_own(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+        org_factory,
+    ) -> None:
+        admin, _owner, org = await self._make_admin_and_foreign_org(
+            async_db_session, user_factory, org_factory
+        )
+        token = create_access_token(data={"sub": admin.email})
+
+        response = async_client_with_db.delete(
+            f"/api/v1/orgs/{org.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    @pytest.mark.asyncio
+    async def test_non_admin_non_owner_still_forbidden(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+        org_factory,
+    ) -> None:
+        """The override is admin-only — a plain outsider is still 403, proving
+        the owner check is genuinely enforced (not just auth being off)."""
+        _admin, _owner, org = await self._make_admin_and_foreign_org(
+            async_db_session, user_factory, org_factory
+        )
+        outsider = await user_factory()
+        token = create_access_token(data={"sub": outsider.email})
+
+        response = async_client_with_db.delete(
+            f"/api/v1/orgs/{org.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_deleting_owner_cascades_org_and_audits_both_events(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+        org_factory,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Deleting a sole-owner user cascades their org and the audit trail
+        carries both ``auth.user_deleted`` and ``auth.org_deleted``."""
+        admin, owner, org = await self._make_admin_and_foreign_org(
+            async_db_session, user_factory, org_factory
+        )
+        token = create_access_token(data={"sub": admin.email})
+
+        caplog.set_level("INFO", logger="audit")
+        response = async_client_with_db.delete(
+            f"/api/v1/auth/users/{owner.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+        events = [
+            getattr(r, "audit", {}) for r in caplog.records if r.name == "audit"
+        ]
+        types = {e.get("event_type") for e in events}
+        assert "auth.user_deleted" in types
+        org_deleted = [e for e in events if e.get("event_type") == "auth.org_deleted"]
+        assert any(e.get("target_id") == org.id for e in org_deleted), (
+            "cascade must emit auth.org_deleted for the orphaned org"
+        )
 {% else %}
 # Organization endpoint tests not included (auth_level != org)
 {% endif %}

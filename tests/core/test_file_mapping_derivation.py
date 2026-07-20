@@ -147,6 +147,20 @@ class TestFootprintSplit:
         assert "app/cli/rag.py" in full
         assert "app/components/frontend/dashboard/modals/voice_settings_tab.py" in full
 
+    def test_ai_add_base_ships_llm_api_and_omits_rag_tab(self) -> None:
+        """Retrofit parity with a fresh scaffold (issue #814): the LLM catalog
+        API rides in the add base, and the RAG tab does not (it is RAG-gated,
+        so it belongs to the ai_rag extras, not the always-copied primary)."""
+        add_base = set(get_component_files("ai"))
+        full = set(get_component_files("ai", full=True))
+        rag_tab = "app/components/frontend/dashboard/modals/rag_tab.py"
+
+        # LLM API dir is in primary -> its files land in the add base.
+        assert "app/components/backend/api/llm/router.py" in add_base
+        # rag_tab only on the remove side / when ai_rag is enabled.
+        assert rag_tab not in add_base
+        assert rag_tab in full
+
     def test_scheduler_memory_excludes_persistence(self) -> None:
         memory = set(get_component_files("scheduler", StorageBackends.MEMORY))
         # Nothing gated on ``scheduler_backend != memory`` may be present.

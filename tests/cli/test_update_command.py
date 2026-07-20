@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from aegis.core.copier_manager import is_copier_project
+from aegis.core.template_cleanup import SyncResult
 
 from .test_utils import run_aegis_command, strip_ansi_codes
 
@@ -504,6 +505,7 @@ class TestUpdateCommandRollback:
         # Either creates backup or hits early exit
         assert result.stdout
 
+    @patch("aegis.commands.update.sync_template_changes")
     @patch("aegis.commands.update.run_post_generation_tasks")
     @patch("copier.run_update")
     @patch("aegis.commands.update.get_current_template_commit")
@@ -516,12 +518,17 @@ class TestUpdateCommandRollback:
         mock_get_commit: MagicMock,
         mock_copier_update: MagicMock,
         mock_post_gen: MagicMock,
+        mock_sync: MagicMock,
         project_factory: "ProjectFactory",
     ) -> None:
         """Test that backup tag is cleaned up on successful update."""
         mock_create_backup.return_value = "aegis-backup-123"
         mock_get_commit.return_value = "different-commit"  # Prevent early exit
         mock_post_gen.return_value = True  # Mock successful post-gen tasks
+        # A clean sync (no conflicts) is what "success" means here — isolate the
+        # backup-cleanup assertion from the merge internals, which conservatively
+        # conflict when no old-render base is available (issue #773).
+        mock_sync.return_value = SyncResult()
 
         project_path = project_factory("base")
 

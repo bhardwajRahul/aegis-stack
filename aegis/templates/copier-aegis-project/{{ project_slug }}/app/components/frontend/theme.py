@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 import flet as ft
 
-from app.components.frontend.styles import FontConfig
+from app.components.frontend.styles import BrandPalette, FontConfig
 
 
 @dataclass(frozen=True)
@@ -26,20 +26,20 @@ class DarkColorPalette:
     TEXT_PRIMARY_DEFAULT: str = "#EEF1F4"  # Main text (foreground)
     TEXT_SECONDARY_DEFAULT: str = "#7E8A9A"  # Muted/placeholder text
 
-    # Brand colors
-    ACCENT: str = "#17CCBF"  # Primary teal/cyan
-    ACCENT_SECONDARY: str = "#248F87"  # Darker teal (secondary accent)
+    # Brand colors — derived from the canonical BrandPalette (styles.py)
+    ACCENT: str = BrandPalette.TEAL  # Primary teal/cyan
+    ACCENT_SECONDARY: str = BrandPalette.TEAL_DARK  # Darker teal (secondary accent)
 
     # Semantic colors
-    ACCENT_SUCCESS: str = "#17CCBF"  # Success teal (brand standard)
-    ACCENT_WARNING: str = "#F5A623"  # Warning orange/amber
-    ACCENT_STOP: str = "#E23E3E"  # Destructive/error red
-    ERROR: str = "#E23E3E"  # Alias for destructive
+    ACCENT_SUCCESS: str = BrandPalette.TEAL  # Success teal (brand standard)
+    ACCENT_WARNING: str = BrandPalette.AMBER  # Warning orange/amber
+    ACCENT_STOP: str = BrandPalette.RED  # Destructive/error red
+    ERROR: str = BrandPalette.RED  # Alias for destructive
 
     # UI elements
     BORDER_PRIMARY: str = "#272C36"  # Borders, dividers
     DISABLED_COLOR: str = "#7E8A9A"  # Same as muted text
-    FOCUS_COLOR: str = "#17CCBF"  # Teal focus
+    FOCUS_COLOR: str = BrandPalette.TEAL  # Teal focus
 
 
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ class LightColorPalette:
     TEXT_PRIMARY_DEFAULT: str = "#212121"
     TEXT_SECONDARY_DEFAULT: str = "#495057"
     ACCENT: str = "#2563eb"
-    ACCENT_SUCCESS: str = "#17CCBF"  # Success teal (brand standard)
+    ACCENT_SUCCESS: str = BrandPalette.TEAL  # Success teal (brand standard)
     ACCENT_STOP: str = "#EF4444"
     ERROR: str = "#D32F2F"
     BORDER_PRIMARY: str = "#E0E3E7"

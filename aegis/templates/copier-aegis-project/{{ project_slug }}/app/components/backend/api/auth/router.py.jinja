@@ -685,6 +685,14 @@ async def delete_user(
     can be restored via ``POST /users/{user_id}/restore``. Pass ``?hard=true``
     for permanent removal (also drops org memberships and invites).
     """
+{%- if include_auth_org %}
+    # Orgs the delete will cascade (issue #709), captured before the delete so
+    # we can emit their audit events. A hard delete also purges an org an
+    # earlier soft delete tombstoned, hence ``include_deleted=hard``.
+    cascaded_org_ids = await user_service.orphaned_sole_owner_org_ids(
+        user_id, include_deleted=hard
+    )
+{%- endif %}
     if hard:
         success = await user_service.hard_delete_user(user_id)
     else:
@@ -700,6 +708,15 @@ async def delete_user(
         target_type="user",
         target_id=user_id,
     )
+{%- if include_auth_org %}
+    for org_id in cascaded_org_ids:
+        await audit.emit(
+            "auth.org_hard_deleted" if hard else "auth.org_deleted",
+            actor_id=current_user.id,
+            target_type="org",
+            target_id=org_id,
+        )
+{%- endif %}
 
 
 @router.post("/users/{user_id}/restore", response_model=UserResponse)

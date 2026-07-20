@@ -37,6 +37,10 @@ Runtime traffic goes through the pooled endpoint. Migrations run over the direct
 
 Development needs none of this: `make serve` runs the local container with zero configuration.
 
+## Deploy and Backups
+
+`aegis deploy` is provider-aware. With the local **container** provider it snapshots the database before a deploy (a `pg_dump` inside the postgres service) and replays that dump if a failed health check triggers a rollback. A **Neon** project runs no database container in production, so there is nothing local to dump: the deploy prints that the database is managed by Neon and skips the local `pg_dump`/`psql` steps. Use Neon's own tooling for database backup and recovery, [branches](https://neon.tech/docs/introduction/branching) for a pre-deploy snapshot and [point-in-time restore](https://neon.tech/docs/introduction/point-in-time-restore) for rollback. Application files on the server are still backed up either way.
+
 ## Switching an Existing Project
 
 The provider is chosen at `aegis init` today. `aegis add` and `aegis update` cannot yet move an existing PostgreSQL project between the local container and Neon, because the Neon connection handling is generated into the project rather than toggled at runtime. Provider switching on a living project is planned.

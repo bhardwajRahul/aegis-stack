@@ -214,7 +214,7 @@ class CollectorService:
 
         broken: list[str] = []
 
-        RECORD_CHECKS: dict[str, list[dict[str, str]]] = {
+        record_checks: dict[str, list[dict[str, str]]] = {
 {% if insights_github %}
             SourceKeys.GITHUB_TRAFFIC: [
                 {"key": "clones", "category": "daily_clones", "label": "GitHub 1-Day Clones", "event_type": "milestone_github"},
@@ -236,7 +236,7 @@ class CollectorService:
 {% endif %}
         }
 
-        checks = RECORD_CHECKS.get(source_key, [])
+        checks = record_checks.get(source_key, [])
         if not checks:
             return broken
 

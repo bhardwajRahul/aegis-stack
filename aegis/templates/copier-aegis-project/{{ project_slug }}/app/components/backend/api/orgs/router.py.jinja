@@ -19,6 +19,7 @@ from app.components.backend.api.utils import (
 )
 from app.core.audit import AuditEmitter
 from app.core.config import settings
+from app.core.security import ROLE_ADMIN
 from app.models.org import (
     ORG_ROLE_ADMIN,
     ORG_ROLE_MEMBER,
@@ -234,8 +235,15 @@ async def delete_org(
     """Delete organization. Requires owner role.
 
     Default is a soft delete; pass ``?hard=true`` for permanent removal.
+
+    A global admin can delete any org — the safety net for an org that
+    orphaned (its owner deleted, a partial transfer, manual SQL). Everyone
+    else must be the org's own owner. See issue #709.
     """
-    await _require_org_role(membership_service, org_id, user.id, {ORG_ROLE_OWNER})
+    if user.role != ROLE_ADMIN:
+        await _require_org_role(
+            membership_service, org_id, user.id, {ORG_ROLE_OWNER}
+        )
 
     if hard:
         success = await org_service.hard_delete_org(org_id)

@@ -495,8 +495,15 @@ class TestSyncTemplateChanges:
         assert result.synced == []
         assert result.conflicts == []
 
-    def test_syncs_differing_files_no_old_commit(self, tmp_path: Path) -> None:
-        """Test that files differing from template are synced (overwrite fallback)."""
+    def test_differing_file_no_old_commit_is_preserved_as_conflict(
+        self, tmp_path: Path
+    ) -> None:
+        """No old_commit → no merge base → preserve + conflict, never overwrite.
+
+        Without a base render we can't tell a user edit from a template change,
+        so silently overwriting the user's file is data loss (issue #773). The
+        file is preserved and the new render is dropped beside it as ``.rej``.
+        """
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
@@ -515,9 +522,12 @@ class TestSyncTemplateChanges:
         with patch("copier.run_copy", side_effect=mock_run_copy):
             result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
 
-        # File should be synced (no old_commit → overwrite fallback)
-        assert "app/config.py" in result.synced
-        assert project_file.read_text() == "# new config from template"
+        # User's file is preserved, not overwritten, and reported as a conflict.
+        assert project_file.read_text() == "# old config"
+        assert "app/config.py" in result.conflicts
+        assert "app/config.py" not in result.synced
+        rej = tmp_path / "app" / "config.py.rej"
+        assert rej.read_text() == "# new config from template"
 
     def test_skips_identical_files(self, tmp_path: Path) -> None:
         """Test that identical files are not synced."""
@@ -592,8 +602,14 @@ class TestSyncTemplateChanges:
             dst_path = str(kwargs["dst_path"])
             rendered_dir = Path(dst_path) / project_slug / "app"
             rendered_dir.mkdir(parents=True)
-            (rendered_dir / "config.py").write_text("# new config")
-            (rendered_dir / "main.py").write_text("# new main")
+            if "/old" in dst_path:
+                # Base render == project content (user hasn't customized), so a
+                # listed file cleanly overwrites rather than conflicting.
+                (rendered_dir / "config.py").write_text("# old config")
+                (rendered_dir / "main.py").write_text("# old main")
+            else:
+                (rendered_dir / "config.py").write_text("# new config")
+                (rendered_dir / "main.py").write_text("# new main")
 
         with patch("copier.run_copy", side_effect=mock_run_copy):
             result = sync_template_changes(
@@ -602,6 +618,7 @@ class TestSyncTemplateChanges:
                 "gh:test/repo",
                 "v1.0.0",
                 template_changed_files={"app/config.py"},
+                old_commit="abc123",
             )
 
         assert "app/config.py" in result.synced
@@ -652,8 +669,13 @@ class TestSyncTemplateChanges:
             dst_path = str(kwargs["dst_path"])
             rendered_dir = Path(dst_path) / project_slug / "app"
             rendered_dir.mkdir(parents=True)
-            (rendered_dir / "config.py").write_text("# new config")
-            (rendered_dir / "main.py").write_text("# new main")
+            if "/old" in dst_path:
+                # Base render == project content, so both files cleanly sync.
+                (rendered_dir / "config.py").write_text("# old config")
+                (rendered_dir / "main.py").write_text("# old main")
+            else:
+                (rendered_dir / "config.py").write_text("# new config")
+                (rendered_dir / "main.py").write_text("# new main")
 
         with patch("copier.run_copy", side_effect=mock_run_copy):
             result = sync_template_changes(
@@ -662,6 +684,7 @@ class TestSyncTemplateChanges:
                 "gh:test/repo",
                 "v1.0.0",
                 template_changed_files=None,
+                old_commit="abc123",
             )
 
         assert "app/config.py" in result.synced
@@ -681,6 +704,48 @@ class TestSyncTemplateChanges:
 
         assert result.synced == []
         assert result.conflicts == []
+
+    def test_new_template_file_is_created_not_skipped(self, tmp_path: Path) -> None:
+        """A file the new template adds must be created, not silently skipped.
+
+        Copier can merge a new module's importers into existing files while
+        failing to materialize the module itself, leaving a broken import graph
+        (issue #775). ``sync_template_changes`` is the backstop: a file in the
+        changed set that the project lacks is a genuine template addition and
+        must be created from the new render.
+        """
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        # An existing importer is present; the new module is NOT in the project.
+        importer = tmp_path / "app" / "importer.py"
+        importer.parent.mkdir(parents=True)
+        importer.write_text("# importer")
+
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            rendered_dir = Path(dst_path) / project_slug / "app"
+            rendered_dir.mkdir(parents=True)
+            (rendered_dir / "importer.py").write_text("# importer")
+            if "/old" not in dst_path:
+                # formatting.py is new this version — only in the NEW render.
+                (rendered_dir / "formatting.py").write_text("def fmt() -> None: ...\n")
+
+        with patch("copier.run_copy", side_effect=mock_run_copy):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                template_changed_files={"app/formatting.py"},
+                old_commit="abc123",
+            )
+
+        created = tmp_path / "app" / "formatting.py"
+        assert created.exists(), "new template file must be created, not skipped"
+        assert created.read_text() == "def fmt() -> None: ...\n"
+        assert "app/formatting.py" in result.synced
+        assert "app/formatting.py" not in result.conflicts
 
 
 class TestThreeWayMerge:
@@ -942,8 +1007,15 @@ class TestThreeWayMerge:
         assert "app/config.py" in result.conflicts
         assert project_file.read_text() == user
 
-    def test_old_render_failure_falls_back_to_overwrite(self, tmp_path: Path) -> None:
-        """When old template render fails, fall back to overwrite behavior."""
+    def test_old_render_failure_preserves_files_as_conflicts(
+        self, tmp_path: Path
+    ) -> None:
+        """A failed old-template render must not overwrite every changed file.
+
+        Before issue #773 a single rendering error degraded into a project-wide
+        silent overwrite. Now each changed file is preserved and reported as a
+        conflict with a ``.rej`` sidecar instead.
+        """
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
@@ -968,12 +1040,23 @@ class TestThreeWayMerge:
                 old_commit="abc123",
             )
 
-        # Falls back to overwrite since old render failed
-        assert "app/config.py" in result.synced
-        assert project_file.read_text() == "# new template content"
+        # User content preserved; new render surfaced as a .rej conflict.
+        assert project_file.read_text() == "# user content"
+        assert "app/config.py" in result.conflicts
+        assert "app/config.py" not in result.synced
+        rej = tmp_path / "app" / "config.py.rej"
+        assert rej.read_text() == "# new template content"
 
-    def test_old_file_not_in_old_render_falls_back(self, tmp_path: Path) -> None:
-        """When a file exists in new but not old template, fall back to overwrite."""
+    def test_file_missing_from_old_render_is_preserved_as_conflict(
+        self, tmp_path: Path
+    ) -> None:
+        """A file new in the template but pre-existing in the project has no base.
+
+        This is the common ``aegis add-service`` case (e.g. payment added after
+        generation): the service's files have no counterpart at the pinned
+        ``_commit``. They must be preserved, not silently overwritten on the
+        next update (issue #773).
+        """
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
@@ -1001,8 +1084,11 @@ class TestThreeWayMerge:
                 old_commit="abc123",
             )
 
-        assert "app/config.py" in result.synced
-        assert project_file.read_text() == "# new template content"
+        assert project_file.read_text() == "# old project content"
+        assert "app/config.py" in result.conflicts
+        assert "app/config.py" not in result.synced
+        rej = tmp_path / "app" / "config.py.rej"
+        assert rej.read_text() == "# new template content"
 
 
 @pytest.mark.xdist_group("generated_stacks")

@@ -793,6 +793,7 @@ MESSAGES: dict[str, str] = {
     "deploy.creating_backup": "Creating backup {timestamp}...",
     "deploy.backup_failed": "Failed to create backup: {error}",
     "deploy.backup_db": "Backing up PostgreSQL database...",
+    "deploy.backup_db_neon": "Database is managed by Neon (branches / point-in-time restore); skipping local backup",
     "deploy.backup_db_failed": (
         "Warning: Database backup failed, continuing without it"
     ),
@@ -859,6 +860,7 @@ MESSAGES: dict[str, str] = {
     "deploy.rollback_restoring": ("Restoring files from backup {timestamp}..."),
     "deploy.rollback_restore_failed": ("Failed to restore files: {error}"),
     "deploy.rollback_db": "Restoring database...",
+    "deploy.rollback_db_neon": "Database recovery is managed by Neon (branches / point-in-time restore); skipping local restore",
     "deploy.rollback_pg_wait": "Waiting for PostgreSQL to be ready...",
     "deploy.rollback_pg_timeout": (
         "PostgreSQL did not become ready, attempting restore anyway"
