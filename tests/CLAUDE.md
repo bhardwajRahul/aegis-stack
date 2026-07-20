@@ -13,6 +13,20 @@ The test infrastructure uses a two-tier caching system in `tests/cli/conftest.py
 
 This avoids regenerating the same project configuration for every test that needs it.
 
+There is a SECOND generation lane: `generated_stacks` builds the
+`STACK_COMBINATIONS` matrix (test_stack_generation / test_stack_validation)
+via full `aegis init` runs. It is **lazy + session-memoized**: a stack is
+generated on first request and reused, so scoped runs only pay for the stacks
+their tests touch. Two rules when adding a matrix row:
+
+- Every new `StackCombination` adds a full init (render + uv sync + make fix
+  + migrations, 10-40s) to any session that exercises the whole matrix — the
+  matrix file is in the FAST lane, so `make test` pays it. Add rows only for
+  genuinely new coverage.
+- Do not build a second near-identical config: if factory-based tests need the
+  same stack, use a `NAMED_PROJECT_SPECS` entry (copied per test), not another
+  matrix row.
+
 ### Cache Configuration: `NAMED_PROJECT_SPECS`
 
 All cached stack configurations are defined in `tests/cli/conftest.py`:

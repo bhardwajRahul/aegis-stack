@@ -106,9 +106,14 @@ def compute_file_mapping(specs: Iterable[Any]) -> dict[str, list[str]]:
 def iter_cleanup_paths(spec: Any, *, selected: bool) -> Iterable[str]:
     """Yield project-relative paths to remove for one spec when it is off.
 
-    R1 scope: only Pattern A primary cleanup. When ``selected`` is True,
-    yields nothing (sub-feature cleanup is handled inline). When False,
-    yields the spec's ``primary`` paths.
+    When ``selected`` is True, yields nothing (sub-feature cleanup is
+    handled inline). When False, yields the spec's complete footprint —
+    ``primary`` plus every ``extras`` group — matching
+    ``get_component_cleanup_paths``: a spec that is off owns none of its
+    files, gated or not. Extras matter here because option-gated files
+    that are NOT empty-rendering (e.g. auth's htmx login pages, plain
+    HTML) would otherwise survive an init that never selected the spec
+    (issue #814).
 
     Args:
         spec: A spec object exposing ``.files: FileManifest``. Specs
@@ -125,6 +130,8 @@ def iter_cleanup_paths(spec: Any, *, selected: bool) -> Iterable[str]:
     if not isinstance(manifest, FileManifest):
         return
     yield from manifest.primary
+    for extra_files in (manifest.extras or {}).values():
+        yield from extra_files
 
 
 def apply_cleanup_path(project_path: Path, rel_path: str) -> None:

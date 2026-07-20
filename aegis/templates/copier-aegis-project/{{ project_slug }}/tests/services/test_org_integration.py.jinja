@@ -22,6 +22,7 @@ from app.models.org import (
 from app.services.auth.invite_service import InviteService
 from app.services.auth.membership_service import MembershipService
 from app.services.auth.org_service import OrgService, RestoreConflictError
+from app.services.auth.user_service import UserService
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -640,6 +641,87 @@ class TestInviteServiceIntegration:
         invite_service = InviteService(async_db_session)
         count = await invite_service.accept_pending_invites("nobody@test.com", 999)
         assert count == 0
+
+
+class TestDeleteUserOrgCascade:
+    """Deleting a user cascades orgs they solely own (issue #709)."""
+
+    async def _org_deleted_at(self, db: AsyncSession, org_id: int):
+        row = (
+            await db.exec(select(Organization).where(Organization.id == org_id))
+        ).first()
+        return row.deleted_at if row else None
+
+    @pytest.mark.asyncio
+    async def test_sole_owner_org_is_soft_deleted(
+        self, async_db_session: AsyncSession, user_factory, org_factory
+    ) -> None:
+        """A user who is the only member and owner takes their org with them —
+        otherwise it orphans with a tombstoned owner no one can remove."""
+        user = await user_factory()
+        org = await org_factory()
+        membership = MembershipService(async_db_session)
+        await membership.add_member(org.id, user.id, role=ORG_ROLE_OWNER)
+
+        assert await self._org_deleted_at(async_db_session, org.id) is None
+        await UserService(async_db_session).delete_user(user.id)
+
+        assert await self._org_deleted_at(async_db_session, org.id) is not None
+
+    @pytest.mark.asyncio
+    async def test_shared_org_survives_owner_deletion(
+        self, async_db_session: AsyncSession, user_factory, org_factory
+    ) -> None:
+        """An org with other members must NOT be cascaded — deleting one user
+        can't remove an org other people still use."""
+        owner = await user_factory()
+        other = await user_factory()
+        org = await org_factory()
+        membership = MembershipService(async_db_session)
+        await membership.add_member(org.id, owner.id, role=ORG_ROLE_OWNER)
+        await membership.add_member(org.id, other.id, role=ORG_ROLE_MEMBER)
+
+        await UserService(async_db_session).delete_user(owner.id)
+
+        assert await self._org_deleted_at(async_db_session, org.id) is None
+
+    @pytest.mark.asyncio
+    async def test_orphaned_sole_owner_org_ids_reports_only_solo_orgs(
+        self, async_db_session: AsyncSession, user_factory, org_factory
+    ) -> None:
+        """The helper the router audits from returns solely-owned orgs only."""
+        user = await user_factory()
+        other = await user_factory()
+        solo_org = await org_factory()
+        shared_org = await org_factory()
+        membership = MembershipService(async_db_session)
+        await membership.add_member(solo_org.id, user.id, role=ORG_ROLE_OWNER)
+        await membership.add_member(shared_org.id, user.id, role=ORG_ROLE_OWNER)
+        await membership.add_member(shared_org.id, other.id, role=ORG_ROLE_MEMBER)
+
+        ids = await UserService(async_db_session).orphaned_sole_owner_org_ids(user.id)
+
+        assert ids == [solo_org.id]
+
+    @pytest.mark.asyncio
+    async def test_hard_delete_purges_sole_owner_org(
+        self, async_db_session: AsyncSession, user_factory, org_factory
+    ) -> None:
+        """A hard delete permanently removes the solo-owned org row — the
+        permanent counterpart of the soft cascade, so it leaves no orphan."""
+        user = await user_factory()
+        org = await org_factory()
+        membership = MembershipService(async_db_session)
+        await membership.add_member(org.id, user.id, role=ORG_ROLE_OWNER)
+
+        await UserService(async_db_session).hard_delete_user(user.id)
+
+        row = (
+            await async_db_session.exec(
+                select(Organization).where(Organization.id == org.id)
+            )
+        ).first()
+        assert row is None, "hard delete must purge the sole-owned org row"
 {% else %}
 # Organization tests not included (auth_level != org)
 {% endif %}

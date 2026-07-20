@@ -785,6 +785,7 @@ MESSAGES: dict[str, str] = {
     "deploy.creating_backup": "Création de la sauvegarde {timestamp}...",
     "deploy.backup_failed": "Échec de la création de la sauvegarde : {error}",
     "deploy.backup_db": "Sauvegarde de la base de données PostgreSQL...",
+    "deploy.backup_db_neon": "La base de données est gérée par Neon (branches / restauration à un instant donné) ; sauvegarde locale ignorée",
     "deploy.backup_db_failed": (
         "Attention : la sauvegarde de la base de données a échoué, poursuite sans sauvegarde"
     ),
@@ -855,6 +856,7 @@ MESSAGES: dict[str, str] = {
     "deploy.rollback_restoring": "Restauration des fichiers depuis la sauvegarde {timestamp}...",
     "deploy.rollback_restore_failed": "Échec de la restauration des fichiers : {error}",
     "deploy.rollback_db": "Restauration de la base de données...",
+    "deploy.rollback_db_neon": "La récupération de la base de données est gérée par Neon (branches / restauration à un instant donné) ; restauration locale ignorée",
     "deploy.rollback_pg_wait": "Attente de la disponibilité de PostgreSQL...",
     "deploy.rollback_pg_timeout": (
         "PostgreSQL n'est pas devenu disponible, tentative de restauration malgré tout"

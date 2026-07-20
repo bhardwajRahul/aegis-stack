@@ -143,7 +143,7 @@ async def test_accounts_include_liability_detail_when_present(
         account_type="credit_card",
         classification="liability",
     )
-    plain = await service.create_manual_account(
+    await service.create_manual_account(
         owner_user_id=1,
         name="AMEX Card",
         account_type="credit_card",

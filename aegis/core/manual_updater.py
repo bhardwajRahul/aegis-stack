@@ -70,6 +70,12 @@ _SERVICE_ANSWER_KEYS = (
 )
 _SERVICES_CARD_FILE = "app/components/frontend/dashboard/cards/services_card.py"
 
+# The model-and-migration skill only applies where alembic exists; init removes
+# both when nothing needs migrations, and the first migration-bearing add must
+# bring the skill back (issue #814). Its add-side mirror is
+# ``ManualUpdater._ensure_migration_skill``.
+_MIGRATION_SKILL_FILE = ".claude/skills/add-model-and-migration/SKILL.md"
+
 
 def _is_empty_stub(path: Path) -> bool:
     """Return True if the file at ``path`` has no meaningful Python content.
@@ -280,6 +286,8 @@ class ManualUpdater:
             loader=FileSystemLoader(str(self.template_path)),
             trim_blocks=False,  # Preserve newlines after blocks (matches Copier default)
             lstrip_blocks=False,  # Preserve whitespace for parity
+            keep_trailing_newline=True,  # Copier keeps it; without this every
+            # regenerated file loses its final newline (issue #814 audit).
         )
 
     def add_component(
@@ -339,7 +347,12 @@ class ManualUpdater:
                 if component == ComponentNames.SCHEDULER
                 else None
             )
-            component_files = get_component_files(component, backend_variant)
+            # Pass the post-add answers so option-gated extras (auth org
+            # files, htmx auth pages, ai rag/voice) are copied exactly when
+            # this project's configuration enables them (issue #814).
+            component_files = get_component_files(
+                component, backend_variant, answers=updated_answers
+            )
 
             # Some components (like Redis) have no template files - they only
             # configure Docker services and dependencies via shared files
@@ -442,6 +455,12 @@ class ManualUpdater:
             created_card = self._ensure_services_card(updated_answers)
             if created_card:
                 files_modified.append(created_card)
+
+            # Cross-spec: the first migration-bearing service restores the
+            # add-model-and-migration skill that init removed (issue #814).
+            created_skill = self._ensure_migration_skill(updated_answers)
+            if created_skill:
+                files_modified.append(created_skill)
 
             # Update .copier-answers.yml
             self._save_answers(updated_answers)
@@ -693,7 +712,9 @@ class ManualUpdater:
 
         return env_vars
 
-    def _run_ruff(self, src: str, check_select: str | None) -> str | None:
+    def _run_ruff(
+        self, src: str, check_select: str | None, rel_path: str | None = None
+    ) -> str | None:
         """Run ruff over ``src`` and return the result, or None on any failure.
 
         ``check_select`` controls the ``ruff check --fix`` step that runs
@@ -707,9 +728,9 @@ class ManualUpdater:
         The temp file lives in the project so ruff discovers the project's
         ``[tool.ruff]`` config by walking up from the file's location.
         """
-        return run_ruff_on_text(src, self.project_path, check_select)
+        return run_ruff_on_text(src, self.project_path, check_select, rel_path=rel_path)
 
-    def _ruff_normalize(self, src: str) -> str | None:
+    def _ruff_normalize(self, src: str, rel_path: str | None = None) -> str | None:
         """Return ``src`` run through the project's full ruff (check --fix + format).
 
         Used to compare two snippets for *semantic* equality (applying the
@@ -720,7 +741,7 @@ class ManualUpdater:
         cases: comparison results stay off disk, and written content is
         always a template default, never user code.
         """
-        return self._run_ruff(src, "")
+        return self._run_ruff(src, "", rel_path)
 
     def _write_rendered(self, output_path: Path, content: str) -> None:
         """Write a rendered template file, formatted the way init formats it.
@@ -734,12 +755,16 @@ class ManualUpdater:
         ruff is unavailable or fails.
         """
         if output_path.suffix == ".py":
-            formatted = self._ruff_normalize(content)
+            # Normalize under the file's real project-relative path so the
+            # project's per-file-ignores stay in force (issue #814: a temp
+            # name let ruff strip deps.py's intentional re-exports).
+            rel = str(output_path.relative_to(self.project_path))
+            formatted = self._ruff_normalize(content, rel_path=rel)
             if formatted is not None:
                 content = formatted
         output_path.write_text(content)
 
-    def _ruff_format_safe(self, src: str) -> str | None:
+    def _ruff_format_safe(self, src: str, rel_path: str | None = None) -> str | None:
         """Normalize Python for *merging* without ever deleting code.
 
         Runs ``ruff check --fix --select I`` (import sorting/merging only,
@@ -750,7 +775,7 @@ class ManualUpdater:
         (whitespace, quotes, line wrapping, import grouping) so a 3-way merge
         doesn't raise spurious conflicts.
         """
-        return self._run_ruff(src, "I")
+        return self._run_ruff(src, "I", rel_path)
 
     def _shared_file_is_pristine(self, output_path: Path, template_file: str) -> bool:
         """Return True if ``output_path`` still matches the template default.
@@ -778,8 +803,9 @@ class ManualUpdater:
         if not output_path.name.endswith(".py"):
             return False
 
-        existing_norm = self._ruff_normalize(existing)
-        baseline_norm = self._ruff_normalize(baseline)
+        rel = str(output_path.relative_to(self.project_path))
+        existing_norm = self._ruff_normalize(existing, rel_path=rel)
+        baseline_norm = self._ruff_normalize(baseline, rel_path=rel)
         if existing_norm is None or baseline_norm is None:
             return False
         return _normalize_for_compare(existing_norm) == _normalize_for_compare(
@@ -818,9 +844,10 @@ class ManualUpdater:
         ours = content
 
         if output_path.name.endswith(".py"):
-            theirs_n = self._ruff_format_safe(theirs)
-            base_n = self._ruff_format_safe(base)
-            ours_n = self._ruff_format_safe(ours)
+            rel = str(output_path.relative_to(self.project_path))
+            theirs_n = self._ruff_format_safe(theirs, rel_path=rel)
+            base_n = self._ruff_format_safe(base, rel_path=rel)
+            ours_n = self._ruff_format_safe(ours, rel_path=rel)
             if theirs_n is None or base_n is None or ours_n is None:
                 return None  # ruff unavailable — fall back to preserve
             theirs, base, ours = theirs_n, base_n, ours_n
@@ -864,9 +891,12 @@ class ManualUpdater:
             # always-on .claude/skills on a pre-skills project): render and
             # write it. Nothing to back up or merge for a file that is new to
             # the project. Warn-only files are exempt: their policy promises we
-            # never write them, so a user-deleted one stays deleted.
+            # never write them, so a user-deleted one stays deleted. So are
+            # no-create files: their existence is stack-gated (component-owned
+            # like scheduler/main.py), so materializing them in a project
+            # without their owner would pollute it (issue #814).
             if not output_path.exists():
-                if not policy.get("overwrite"):
+                if not policy.get("overwrite") or not policy.get("create", True):
                     continue
                 content = self._render_template_file(template_file, updated_answers)
                 if content is None:
@@ -898,6 +928,20 @@ class ManualUpdater:
                 # (Phase B); fall back to preserving it untouched if the merge
                 # can't run.
                 if not self._shared_file_is_pristine(output_path, template_file):
+                    # Warn-if-diverged policy (issue #870): the template only
+                    # partly owns this file (e.g. the Dockerfile's htmx
+                    # css-build stage), so a hand-edited copy must NOT be
+                    # merged — the merge could mangle custom build steps the
+                    # template can't reproduce. Preserve it untouched and warn,
+                    # but only when this operation would actually change the
+                    # template output (base == ours ⇒ nothing to warn about).
+                    if policy.get("warn"):
+                        base = self._render_template_file(template_file, self.answers)
+                        if base is not None and content == base:
+                            continue
+                        print(f"   {t('updater.shared_preserved', file=shared_file)}")
+                        shared_files_need_manual_merge.append(shared_file)
+                        continue
                     status = self._merge_shared_file(
                         output_path, template_file, content
                     )
@@ -953,6 +997,52 @@ class ManualUpdater:
             shared_files_backed_up,
             shared_files_need_manual_merge,
         )
+
+    def _answers_need_migrations(self, answers: dict[str, Any]) -> bool:
+        """Mirror of post-gen's ``needs_migrations`` gate (``post_gen_tasks``):
+        any table-bearing service, or a postgres-backed scheduler."""
+        ai_needs = bool(answers.get(AnswerKeys.AI)) and answers.get(
+            AnswerKeys.AI_BACKEND
+        ) in (StorageBackends.SQLITE, StorageBackends.POSTGRES)
+        scheduler_needs = (
+            bool(answers.get(AnswerKeys.SCHEDULER))
+            and answers.get(AnswerKeys.SCHEDULER_BACKEND) == StorageBackends.POSTGRES
+        )
+        return bool(
+            answers.get(AnswerKeys.AUTH)
+            or ai_needs
+            or answers.get(AnswerKeys.INSIGHTS)
+            or answers.get(AnswerKeys.PAYMENT)
+            or answers.get(AnswerKeys.BLOG)
+            or answers.get(AnswerKeys.FINANCE)
+            or scheduler_needs
+        )
+
+    def _ensure_migration_skill(self, answers: dict[str, Any]) -> str | None:
+        """Create the add-model-and-migration skill when migrations arrive.
+
+        Init removes ``.claude/skills/add-model-and-migration`` alongside
+        ``alembic/`` when nothing needs migrations, so a project that gains
+        its first migration-bearing service via ``aegis add`` must get the
+        skill back — the add-side mirror of that inline removal, like
+        :meth:`_ensure_services_card` (issue #814).
+
+        Returns the project-relative path if it created the file, else None.
+        """
+        if not self._answers_need_migrations(answers):
+            return None
+        output_path = self.project_path / _MIGRATION_SKILL_FILE
+        if output_path.exists():
+            return None
+        content = self._render_template_file(
+            f"{PROJECT_SLUG_PLACEHOLDER}/{_MIGRATION_SKILL_FILE}", answers
+        )
+        if content is None:
+            return None
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(content)
+        verbose_print(f"   Created cross-spec file: {_MIGRATION_SKILL_FILE}")
+        return _MIGRATION_SKILL_FILE
 
     def _ensure_services_card(self, answers: dict[str, Any]) -> str | None:
         """Create ``services_card.py`` when an add brings the first service.
@@ -1055,6 +1145,7 @@ class ManualUpdater:
             loader=FileSystemLoader(str(template_root)),
             trim_blocks=False,
             lstrip_blocks=False,
+            keep_trailing_newline=True,
         )
 
         files_written: list[str] = []

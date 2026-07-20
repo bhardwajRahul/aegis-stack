@@ -16,6 +16,7 @@ import typer
 import yaml
 
 from ..cli import brand
+from ..constants import AnswerKeys, PostgresProviders
 from ..i18n import lazy_t, t
 
 _BACKUP_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
@@ -96,6 +97,27 @@ def _save_deploy_config(config: dict) -> None:
     config_path = config_dir / "deploy.yml"
     with open(config_path, "w") as f:
         yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
+
+
+def _is_neon_database(project_path: str | None = None) -> bool:
+    """True when the project targets Neon (cloud Postgres) in production.
+
+    Read from ``.copier-answers.yml`` (``postgres_provider``). Neon owns
+    backups and recovery (branches / point-in-time restore) and runs no
+    Postgres container in the prod profile, so the deploy skips the local
+    ``pg_dump``/``psql`` path for these projects. Any project missing or
+    unreadable answers defaults to the local-container behavior.
+    """
+    project_root = Path(project_path) if project_path else _get_project_root()
+    answers_path = project_root / AnswerKeys.ANSWERS_FILENAME
+    if not answers_path.exists():
+        return False
+    try:
+        with open(answers_path) as f:
+            answers = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError):
+        return False
+    return answers.get(AnswerKeys.POSTGRES_PROVIDER) == PostgresProviders.NEON
 
 
 def _compose_prefix(deploy_path: str) -> str:
@@ -183,7 +205,11 @@ def _get_health_config(config: dict) -> dict:
 
 
 def _create_backup(
-    host: str, user: str, deploy_path: str, include_db: bool = True
+    host: str,
+    user: str,
+    deploy_path: str,
+    include_db: bool = True,
+    neon: bool = False,
 ) -> str | None:
     """Create a timestamped backup on the remote server.
 
@@ -206,8 +232,12 @@ def _create_backup(
         brand.error(t("deploy.backup_failed", error=result.stderr), err=True)
         return None
 
-    # Database backup if PostgreSQL is running
-    if include_db:
+    # Database backup. Neon owns backups (branches / point-in-time restore) and
+    # runs no local postgres container in the prod profile, so there is nothing
+    # to pg_dump — say so explicitly instead of silently skipping (issue #765).
+    if include_db and neon:
+        typer.echo(t("deploy.backup_db_neon"))
+    elif include_db:
         compose_prefix = _compose_prefix(deploy_path)
         # Check if postgres service exists and is running
         pg_check = _run_remote_capture(
@@ -259,7 +289,11 @@ def _prune_backups(host: str, user: str, deploy_path: str, keep_count: int) -> N
 
 
 def _rollback_to_backup(
-    host: str, user: str, deploy_path: str, backup_timestamp: str
+    host: str,
+    user: str,
+    deploy_path: str,
+    backup_timestamp: str,
+    neon: bool = False,
 ) -> bool:
     """Rollback to a specific backup. Returns True on success."""
     safe_path = shlex.quote(deploy_path)
@@ -291,9 +325,17 @@ def _rollback_to_backup(
         )
         return False
 
-    # Check for database backup
-    db_check = _run_remote_capture(host, user, f"test -f {safe_backup}/db_backup.sql")
-    if db_check.returncode == 0:
+    # Database restore. Neon manages recovery (branches / point-in-time
+    # restore); there is no local dump to replay, so report that rather than
+    # silently no-op (issue #765).
+    if neon:
+        typer.echo(t("deploy.rollback_db_neon"))
+        db_check = None
+    else:
+        db_check = _run_remote_capture(
+            host, user, f"test -f {safe_backup}/db_backup.sql"
+        )
+    if db_check is not None and db_check.returncode == 0:
         typer.echo(t("deploy.rollback_db"))
         # Start only postgres first
         _run_remote(host, user, f"{compose_prefix} up -d postgres")
@@ -979,6 +1021,7 @@ def deploy_command(
     deploy_path = config["server"]["path"]
     backup_cfg = _get_backup_config(config)
     health_cfg = _get_health_config(config)
+    neon = _is_neon_database(project_path)
 
     project_root = Path(project_path) if project_path else _get_project_root()
 
@@ -1011,6 +1054,7 @@ def deploy_command(
                 user,
                 deploy_path,
                 include_db=backup_cfg["include_database"],
+                neon=neon,
             )
             if backup_timestamp:
                 _prune_backups(host, user, deploy_path, backup_cfg["keep_count"])
@@ -1096,7 +1140,7 @@ def deploy_command(
         brand.error(t("deploy.start_failed"), err=True)
         if backup_timestamp and health_cfg["auto_rollback"]:
             brand.warn(t("deploy.auto_rollback"))
-            _rollback_to_backup(host, user, deploy_path, backup_timestamp)
+            _rollback_to_backup(host, user, deploy_path, backup_timestamp, neon=neon)
         raise typer.Exit(1)
 
     # Step 6: Restart Traefik if present
@@ -1118,7 +1162,9 @@ def deploy_command(
         if not healthy:
             if backup_timestamp and health_cfg["auto_rollback"]:
                 brand.warn(t("deploy.auto_rollback"), bold=True)
-                success = _rollback_to_backup(host, user, deploy_path, backup_timestamp)
+                success = _rollback_to_backup(
+                    host, user, deploy_path, backup_timestamp, neon=neon
+                )
                 if success:
                     brand.success(t("deploy.rolled_back", timestamp=backup_timestamp))
                 else:
@@ -1166,6 +1212,7 @@ def deploy_backup_command(
         user,
         deploy_path,
         include_db=backup_cfg["include_database"],
+        neon=_is_neon_database(project_path),
     )
     if not timestamp:
         raise typer.Exit(1)
@@ -1273,7 +1320,9 @@ def deploy_rollback_command(
 
     brand.warn(t("deploy.rolling_back", backup=backup, host=host), bold=True)
 
-    success = _rollback_to_backup(host, user, deploy_path, backup)
+    success = _rollback_to_backup(
+        host, user, deploy_path, backup, neon=_is_neon_database(project_path)
+    )
     if success:
         # Restart Traefik if present
         prefix = _compose_prefix(deploy_path)

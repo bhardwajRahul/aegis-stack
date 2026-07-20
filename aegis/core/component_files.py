@@ -229,7 +229,11 @@ def _spec_extras(component: str) -> dict[str, list[str]]:
 
 
 def get_component_files(
-    component: str, backend_variant: str | None = None, *, full: bool = False
+    component: str,
+    backend_variant: str | None = None,
+    *,
+    full: bool = False,
+    answers: dict[str, Any] | None = None,
 ) -> list[str]:
     """
     Get list of file paths that belong to a component.
@@ -250,10 +254,18 @@ def get_component_files(
     fully deleted regardless of which options were enabled; over-deletion is
     safe because missing paths are no-ops.
 
+    With ``answers`` provided, extras groups whose name is a truthy answer key
+    (``include_auth_org``, ``include_htmx``, ``ai_rag``, ...) join the add
+    base. This is how ``aegis add`` copies option-gated files exactly when the
+    project's configuration enables them — e.g. auth's org files on an
+    ``auth[org]`` add, or its htmx login pages when the project ships the htmx
+    frontend — instead of over-copying them from ``primary`` (issue #814).
+
     Args:
         component: Component name (e.g., "scheduler", "worker", "database")
         backend_variant: Optional backend variant (e.g., "memory", "sqlite") for scheduler
         full: When True, include every gated extra group (remove footprint)
+        answers: Project answers; enables extras whose group name is truthy
 
     Returns:
         List of file paths relative to project root
@@ -275,6 +287,15 @@ def get_component_files(
         for extra_files in _spec_extras(component).values():
             base.extend(extra_files)
         return sorted(set(_expand_directories_to_files(base)))
+
+    if answers:
+        # Option-gated extras join the add base when the project's answers
+        # enable them. Groups whose name isn't an answer key (e.g.
+        # ``scheduler_persistence``, handled by the backend_variant branch
+        # below) simply never match.
+        for group, extra_files in _spec_extras(component).items():
+            if answers.get(group):
+                base.extend(extra_files)
 
     if component == ComponentNames.SCHEDULER:
         # Scheduler persistence files are gated on ``scheduler_backend !=

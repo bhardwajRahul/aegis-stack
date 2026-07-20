@@ -17,11 +17,15 @@ from pathlib import Path
 import pytest
 import yaml
 
+from aegis.commands import deploy as deploy_mod
 from aegis.commands.deploy import (
     ROLLING_ROLLOUT_TIMEOUT_DEFAULT,
+    _create_backup,
     _detect_github_repo,
+    _is_neon_database,
     _project_python_minor,
     _render_deploy_workflow,
+    _rollback_to_backup,
     _rolling_health_verdict,
     _rolling_inspect_health_command,
     _rolling_scale_command,
@@ -194,3 +198,84 @@ def test_project_python_minor_returns_none_when_constraint_missing(
 def test_project_python_minor_returns_none_for_malformed_toml(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text("this is = not :: valid toml [")
     assert _project_python_minor(tmp_path) is None
+
+
+# --- Neon-aware deploy (issue #765) -----------------------------------------
+
+
+def _write_answers(path: Path, provider: str) -> None:
+    (path / ".copier-answers.yml").write_text(
+        f"database_engine: postgres\npostgres_provider: {provider}\n"
+    )
+
+
+def test_is_neon_database_true_for_neon_provider(tmp_path: Path) -> None:
+    _write_answers(tmp_path, "neon")
+    assert _is_neon_database(str(tmp_path)) is True
+
+
+def test_is_neon_database_false_for_container_provider(tmp_path: Path) -> None:
+    _write_answers(tmp_path, "container")
+    assert _is_neon_database(str(tmp_path)) is False
+
+
+def test_is_neon_database_false_when_answers_missing(tmp_path: Path) -> None:
+    assert _is_neon_database(str(tmp_path)) is False
+
+
+def test_is_neon_database_false_for_malformed_answers(tmp_path: Path) -> None:
+    (tmp_path / ".copier-answers.yml").write_text("{ not: valid: yaml")
+    assert _is_neon_database(str(tmp_path)) is False
+
+
+def _record_remote(calls: list[str]):
+    def _fake(host: str, user: str, command: str) -> subprocess.CompletedProcess:
+        calls.append(command)
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+    return _fake
+
+
+def test_create_backup_skips_local_pgdump_for_neon(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(deploy_mod, "_run_remote_capture", _record_remote(calls))
+
+    ts = _create_backup("h", "u", "/srv/app", include_db=True, neon=True)
+
+    assert ts is not None
+    assert not any("pg_dump" in c for c in calls), "neon backup must not run pg_dump"
+    assert not any("ps postgres" in c for c in calls)
+
+
+def test_create_backup_runs_pgdump_for_container_when_pg_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+
+    def fake(host: str, user: str, command: str) -> subprocess.CompletedProcess:
+        calls.append(command)
+        # Report the postgres service as present/running.
+        stdout = "abc123\n" if "ps postgres" in command else ""
+        return subprocess.CompletedProcess([], returncode=0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(deploy_mod, "_run_remote_capture", fake)
+
+    _create_backup("h", "u", "/srv/app", include_db=True, neon=False)
+
+    assert any("pg_dump" in c for c in calls), "container backup must run pg_dump"
+
+
+def test_rollback_skips_db_restore_for_neon(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(deploy_mod, "_run_remote_capture", _record_remote(calls))
+    monkeypatch.setattr(deploy_mod, "_run_remote", _record_remote(calls))
+
+    ok = _rollback_to_backup("h", "u", "/srv/app", "2026-01-01_000000", neon=True)
+
+    assert ok is True
+    assert not any("psql" in c for c in calls), "neon rollback must not run psql"
+    assert not any("db_backup.sql" in c for c in calls)

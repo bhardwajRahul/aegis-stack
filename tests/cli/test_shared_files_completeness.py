@@ -22,14 +22,18 @@ from aegis.config.shared_files import SHARED_TEMPLATE_FILES
 from tests.cli.conftest import ProjectFactory
 
 # Files whose content varies with the stack but which we deliberately do NOT
-# force-regenerate. Two reasons, kept separate by comment:
-#   (a) user-owned prose/config we must not clobber on every update, and
-#   (b) known regeneration gaps we accept for now (tracked, to revisit).
-# The guard requires every entry here to actually exist and actually differ
-# across stacks, so this list can't rot into a dumping ground.
+# force-regenerate: user-owned prose/config we must not clobber on every
+# update. The guard requires every entry here to actually exist and actually
+# differ across stacks, so this list can't rot into a dumping ground.
+#
+# The former "(b) known regeneration gaps" section was promoted to
+# ``SHARED_TEMPLATE_FILES`` (with the no-create ``_REGEN_EXISTING`` policy)
+# after the issue #814 audit showed the staleness shipped default-open
+# endpoints (metrics/task-history auth gates) and never-registered scheduler
+# jobs on the add path.
 INTENTIONALLY_NOT_REGENERATED: frozenset[str] = frozenset(
     {
-        # (a) User-owned content — regenerating/merging these on every stack
+        # User-owned content — regenerating/merging these on every stack
         # change would fight the user; left untouched by design.
         "README.md",
         "mkdocs.yml",
@@ -37,23 +41,6 @@ INTENTIONALLY_NOT_REGENERATED: frozenset[str] = frozenset(
         "docs/api.md",
         "docs/development.md",
         "docs/health.md",
-        # (b) Known regeneration gaps. These are files with
-        # component-conditional content that are not yet regenerated on
-        # update. Captured explicitly so they're tracked rather than silent;
-        # promoting them to SHARED_TEMPLATE_FILES (or to a component manifest,
-        # for the worker/observability ones) is a follow-up — it changes
-        # update behavior, so out of scope for the no-behavior-change pass.
-        "app/cli/main.py",  # conditional subcommand registration
-        "app/cli/migrate_fix.py",
-        "app/i18n/registry.py",  # conditional translation-module registration
-        "app/components/backend/api/load_test_api.py",
-        "app/components/backend/api/metrics.py",
-        "app/components/backend/api/task_history.py",
-        "app/services/load_test/__init__.py",
-        "tests/api/test_health_endpoints.py",
-        "tests/api/test_load_test_api_endpoints.py",
-        "tests/api/test_metrics_endpoints.py",
-        "tests/components/test_frontend_routing.py",
     }
 )
 

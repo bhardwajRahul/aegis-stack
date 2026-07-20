@@ -11,6 +11,24 @@ import flet as ft
 
 
 @dataclass(frozen=True)
+class BrandPalette:
+    """Canonical Aegis brand accents — the single source for teal/amber/red.
+
+    Everything that renders a brand accent derives from here: ``PulseColors``
+    below, and ``DarkColorPalette`` in ``theme.py`` (which imports this — the
+    dependency runs theme -> styles, so the source has to live here). The tool
+    CLI (``aegis/cli/brand.py``) mirrors these literals because a generated app
+    can't import the aegis tool; ``tests/cli/test_brand_palette_parity.py`` fails
+    if the two ever drift.
+    """
+
+    TEAL: str = "#17CCBF"  # Primary teal/cyan accent (and success state)
+    TEAL_DARK: str = "#248F87"  # Secondary/darker teal
+    AMBER: str = "#F5A623"  # Warning amber
+    RED: str = "#E23E3E"  # Destructive/error red
+
+
+@dataclass(frozen=True)
 class ColorPalette:
     """
     Dark mode color palette for modern, sleek UI.
@@ -64,9 +82,9 @@ class PulseColors:
     BORDER: str = "#272C36"
     TEXT: str = "#EEF1F4"
     MUTED: str = "#7E8A9A"
-    TEAL: str = "#17CCBF"
-    AMBER: str = "#F59E0B"
-    STOP: str = "#E23E3E"
+    TEAL: str = BrandPalette.TEAL
+    AMBER: str = BrandPalette.AMBER  # brand amber (was drifted to #F59E0B)
+    STOP: str = BrandPalette.RED
 
 
 @dataclass(frozen=True)

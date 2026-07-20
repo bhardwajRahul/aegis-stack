@@ -267,25 +267,36 @@ def project_factory(
 @pytest.fixture(scope="session")
 def generated_stacks(
     session_temp_dir: Path,
-) -> dict[str, tuple[StackCombination, CLITestResult]]:
+) -> Callable[[str], tuple[StackCombination, CLITestResult]]:
     """
-    Generate all stack combinations once per test session.
+    Lazily generate stack combinations, memoized for the session.
+
+    Each combination is a full ``aegis init`` (render + uv sync + make fix +
+    migrations), 10-40s apiece — the single most expensive fixture in the
+    suite, and it grows with every matrix row (htmx, finance, ...). The old
+    eager version built ALL combinations the moment any test touched the
+    fixture, so a one-test run paid for the whole matrix. Now a stack is
+    generated on first request and reused for the rest of the session; a full
+    matrix run costs the same as before, a scoped run only pays for the
+    stacks its tests actually use.
 
     Runs serially — ``run_aegis_init`` invokes the aegis CLI in-process via
-    Typer's ``CliRunner``, so it shares module state, cwd, and copier caches.
-    A ThreadPoolExecutor here races on all of those. Parallelizing this lane
-    would require a ProcessPoolExecutor (with subprocess isolation) or a
-    refactor of ``run_aegis_init`` to shell out — both bigger changes.
-
-    Returns a dict mapping stack names to (combination, result) tuples.
+    Typer's ``CliRunner``, so it shares module state, cwd, and copier caches
+    (the ``generated_stacks`` xdist group pins all consumers to one worker).
     """
-    stacks = {}
+    stacks: dict[str, tuple[StackCombination, CLITestResult]] = {}
+    combinations = {c.name: c for c in STACK_COMBINATIONS}
 
-    print(f"\nGenerating {len(STACK_COMBINATIONS)} stacks for session...")
+    def _get_or_generate(name: str) -> tuple[StackCombination, CLITestResult]:
+        if name in stacks:
+            return stacks[name]
+        combination = combinations.get(name)
+        if combination is None:
+            raise KeyError(
+                f"Stack '{name}' not found. Available: {sorted(combinations)}"
+            )
 
-    for combination in STACK_COMBINATIONS:
-        print(f"   - Generating {combination.name} stack...")
-
+        print(f"\n   - Generating {name} stack for session...")
         result = run_aegis_init(
             combination.project_name,
             combination.components,
@@ -293,34 +304,24 @@ def generated_stacks(
             services=combination.services or None,
             dev=True,
         )
-
         if not result.success:
             raise RuntimeError(
-                f"Failed to generate {combination.name} stack for test session:\n"
+                f"Failed to generate {name} stack for test session:\n"
                 f"STDOUT: {result.stdout}\n"
                 f"STDERR: {result.stderr}"
             )
+        stacks[name] = (combination, result)
+        return stacks[name]
 
-        stacks[combination.name] = (combination, result)
-
-    print(f"All {len(stacks)} stacks generated successfully!")
-    return stacks
+    return _get_or_generate
 
 
 @pytest.fixture
 def get_generated_stack(
-    generated_stacks: dict[str, tuple[StackCombination, CLITestResult]],
+    generated_stacks: Callable[[str], tuple[StackCombination, CLITestResult]],
 ) -> Any:
-    """Helper to get a specific generated stack by name."""
-
-    def _get_stack(name: str) -> tuple[StackCombination, CLITestResult]:
-        if name not in generated_stacks:
-            raise KeyError(
-                f"Stack '{name}' not found. Available: {list(generated_stacks.keys())}"
-            )
-        return generated_stacks[name]
-
-    return _get_stack
+    """Helper to get (lazily generating on first use) a stack by name."""
+    return generated_stacks
 
 
 # Database Runtime Testing Fixtures
