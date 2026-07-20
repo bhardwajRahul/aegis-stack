@@ -122,6 +122,33 @@ class TestUpdateAgent:
         with pytest.raises(InvalidAgentUpdateError):
             await update_agent("assistant", {"slug": "hijack"}, session=session)
 
+    async def test_null_required_fields_are_rejected_cleanly(
+        self, session: AsyncSession
+    ) -> None:
+        """JSON null on a non-nullable field is a validation error, not a 500."""
+        await _add_agent(session, "assistant")
+
+        for field in (
+            "name",
+            "temperature",
+            "max_tokens",
+            "system_prompt",
+            "is_active",
+        ):
+            with pytest.raises(InvalidAgentUpdateError):
+                await update_agent("assistant", {field: None}, session=session)
+
+    async def test_null_model_id_means_active_default(
+        self, session: AsyncSession
+    ) -> None:
+        await _add_agent(session, "assistant", model_id="gpt-x")
+
+        updated = await update_agent(
+            "assistant", {"model_id": None}, session=session
+        )
+
+        assert updated.model_id is None
+
 
 class TestSerializeAgent:
     async def test_serializes_full_shape(self, session: AsyncSession) -> None:

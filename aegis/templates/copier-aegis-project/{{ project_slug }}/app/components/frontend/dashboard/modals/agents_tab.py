@@ -13,9 +13,10 @@ import flet as ft
 from app.components.frontend.controls import (
     DataTable,
     DataTableColumn,
-    H2Text,
     H3Text,
+    PrimaryText,
     SecondaryText,
+    ThemedSwitch,
 )
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.form_fields import (
@@ -157,9 +158,8 @@ class AgentEditPopup(BasePopup):
             max_lines=14,
             variant="pulse",
         )
-        self._active = ft.Switch(
+        self._active = ThemedSwitch(
             value=bool(agent.get("is_active", False)),
-            active_color=Theme.Colors.SUCCESS,
         )
 
         grants = ", ".join(agent.get("tools", [])) or "(none)"
@@ -172,8 +172,11 @@ class AgentEditPopup(BasePopup):
                     [
                         ft.Column(
                             [
-                                H2Text(f"Edit '{self._slug}'"),
-                                SecondaryText("Agent definition"),
+                                PrimaryText(
+                                    f"Edit '{agent.get('name') or self._slug}'",
+                                    weight=Theme.Typography.WEIGHT_SEMIBOLD,
+                                ),
+                                SecondaryText(f"Agent definition  |  {self._slug}"),
                             ],
                             spacing=2,
                             expand=True,
@@ -255,9 +258,9 @@ class AgentEditPopup(BasePopup):
         # with the rest of the Overseer modals.
         super().__init__(
             page=page,
-            content=ft.Container(content=body, padding=20, width=760, height=640),
-            width=760,
-            height=640,
+            content=ft.Container(content=body, padding=20, width=940, height=760),
+            width=940,
+            height=760,
             border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=Theme.Components.CARD_RADIUS,
             bgcolor=ft.Colors.SURFACE,

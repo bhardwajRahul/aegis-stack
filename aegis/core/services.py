@@ -345,11 +345,12 @@ SERVICES: dict[str, ServiceSpec] = {
         type=ServiceType.AI,
         description="AI chatbot service with multi-framework support",
         long_description=(
-            "A complete AI platform: multi-provider chat, an LLM catalog "
-            "with roughly 2000 models, cost tracking with usage analytics, "
-            "optional RAG for codebase-aware conversations, and optional "
-            "voice (TTS/STT). Pick Pydantic AI or LangChain as the "
-            "framework."
+            "A complete AI platform: multi-provider chat, a database-"
+            "driven agent registry with tools and memory modules, an LLM "
+            "catalog with roughly 2000 models, cost tracking with usage "
+            "analytics, sentiment analytics, optional RAG for codebase-"
+            "aware conversations, and optional voice (TTS/STT). Pick "
+            "Pydantic AI or LangChain as the framework."
         ),
         required_components=[ComponentNames.BACKEND],
         # Round 7 wiring: 4 conditional routers + dashboard card/modal.
@@ -496,6 +497,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/cli/test_chat_completer.py",
                 "tests/cli/test_llm_cli.py",
                 "tests/cli/test_agents_cli.py",
+                "tests/cli/test_ai_streaming_gate.py",
                 "tests/cli/test_slash_commands.py",
                 "tests/cli/test_status_line.py",
                 "tests/services/ai",

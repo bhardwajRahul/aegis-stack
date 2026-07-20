@@ -54,6 +54,30 @@ http://localhost:8000/ai
 
     [:octicons-arrow-right-24: Details](#get-aihealth)
 
+-   :material-account-group: **GET `/ai/agents`**
+
+    ---
+
+    List agent definitions with tool and module grants
+
+-   :material-pencil: **PATCH `/ai/agents/{slug}`**
+
+    ---
+
+    Update an agent's editable fields
+
+-   :material-chart-bar: **GET `/ai/usage/stats`**
+
+    ---
+
+    Aggregated token usage and cost statistics
+
+-   :material-emoticon-outline: **GET `/ai/sentiment/stats`**
+
+    ---
+
+    Conversation sentiment distribution and recent negatives
+
 -   :material-information: **GET `/ai/version`**
 
     ---
@@ -407,6 +431,63 @@ Get a specific conversation with full message history.
 
 ```bash
 curl "http://localhost:8000/ai/conversations/CONVERSATION_ID?user_id=my-user"
+```
+
+## Agent Registry
+
+Requires a database backend (`ai[sqlite]` / `ai[postgres]`). See [Agents](agents.md).
+
+### GET `/ai/agents`
+
+List every agent definition, including tool and memory-module grants.
+
+```bash
+curl http://localhost:8000/ai/agents
+```
+
+```json
+[
+  {
+    "slug": "assistant",
+    "name": "Illiana",
+    "model_id": null,
+    "temperature": 0.7,
+    "max_tokens": 1000,
+    "system_prompt": "...",
+    "is_active": true,
+    "tools": [],
+    "memory_modules": [],
+    "knowledge_base_ids": []
+  }
+]
+```
+
+### PATCH `/ai/agents/{slug}`
+
+Partial update of an agent's editable fields (`name`, `description`, `category`, `model_id`, `temperature`, `max_tokens`, `system_prompt`, `is_active`). The agent's cached configuration is invalidated, so the next chat request uses the new definition. Unknown slugs return 404; invalid values (temperature outside 0-2, empty prompt) return 400.
+
+```bash
+curl -X PATCH http://localhost:8000/ai/agents/assistant \
+  -H "Content-Type: application/json" \
+  -d '{"temperature": 0.3, "is_active": true}'
+```
+
+## Analytics
+
+### GET `/ai/usage/stats`
+
+Aggregated token usage and cost statistics, with optional `user_id`, `start_time`, `end_time`, and `recent_limit` query parameters.
+
+```bash
+curl "http://localhost:8000/ai/usage/stats?recent_limit=10"
+```
+
+### GET `/ai/sentiment/stats`
+
+Sentiment and performance distributions, average score, and recent negative conversations. Zero-filled until the (off-by-default) scoring job runs; the `enabled` field reports whether `AI_SENTIMENT_ENABLED` is set.
+
+```bash
+curl http://localhost:8000/ai/sentiment/stats
 ```
 
 ## Service Status
