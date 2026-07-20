@@ -821,9 +821,6 @@ class TagPicker(ft.Container):
     def clear_tags(self) -> None:
         self.set_tag_slugs([])
 
-    async def reload(self) -> None:
-        await self._load()
-
 
 # Platforms the export frontmatter understands (see
 # app/services/blog/models.py ``syndicate_targets``): slug -> display label.

@@ -21,6 +21,19 @@ generated projects (often a scratch `my-app/`) are prototypes. Any change made
 in a generated project MUST be backported to its template in the same session,
 or it is lost on the next `aegis init`. Full workflow: the template-dev skill.
 
+### Dual-write: templates AND the live my-app
+There is always a live `my-app` instance running that the user drives (docker,
+hot-reloading a bind-mounted source tree). Every code change must land in BOTH
+the template AND that live my-app in the same session, so the user sees it on
+reload. The live tree is whatever is bind-mounted into the running
+`my-app-webserver-1` container, NOT necessarily the top-level `my-app/`:
+confirm the path with `docker inspect my-app-webserver-1 --format '{{ "{{" }}range
+.Mounts{{ "}}" }}{{ "{{" }}.Source{{ "}}" }} -> {{ "{{" }}.Destination{{ "}}" }}{{ "{{" }}end{{ "}}" }}'` before
+editing (accidental `aegis init` nesting has produced `my-app/my-app/my-app`).
+`.py` files render identically across finance stacks so copy them; `.jinja`
+files are stack-specific so edit surgically. See memory
+`project-my-app-disposable`.
+
 ### Scope control
 Fix exactly what is asked. No scope creep, no unrequested test suites, minimal
 viable change, and verify it works.

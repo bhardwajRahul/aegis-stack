@@ -594,6 +594,18 @@ def _open_modal(
         if popup:
             modal_cache[component_name] = popup
             page.overlay.append(popup)
+        else:
+            # No factory branch matched — the click silently does nothing.
+            # That is almost always a wiring gap (a missing
+            # create_modal_for_component branch or modal_map entry), so leave a
+            # trail instead of a dead click. See issue #814.
+            from app.core.log import logger
+
+            logger.warning(
+                "No modal registered for component '%s'; card click is a no-op "
+                "(check create_modal_for_component and the modal_map).",
+                component_name,
+            )
     else:
         # Refresh cached modal with latest health check data
         if hasattr(popup, "update_data"):

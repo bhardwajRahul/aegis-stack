@@ -13,7 +13,8 @@ containerization. Change the stack with the `aegis` CLI, never by hand.
 Selected capabilities:
 
 - Backend (FastAPI): the HTTP API and application wiring.
-{% if include_database %}- Database ({{ database_engine }}): SQLModel models and alembic migrations.
+{% if include_htmx %}- Web frontend (htmx + Alpine.js + DaisyUI): server-rendered pages.
+{% endif %}{% if include_database %}- Database ({{ database_engine }}): SQLModel models and alembic migrations.
 {% endif %}{% if include_worker %}- Worker ({{ worker_backend }}): background job processing.
 {% endif %}{% if include_scheduler %}- Scheduler ({{ scheduler_backend }}): periodic and scheduled jobs.
 {% endif %}{% if include_redis %}- Redis: cache and message broker.

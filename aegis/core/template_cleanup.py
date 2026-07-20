@@ -109,7 +109,10 @@ def ruff_executable(project_path: Path | None = None) -> str | None:
 
 
 def run_ruff_on_text(
-    src: str, project_path: Path, check_select: str | None
+    src: str,
+    project_path: Path,
+    check_select: str | None,
+    rel_path: str | None = None,
 ) -> str | None:
     """Run ruff over ``src`` and return the result, or None on any failure.
 
@@ -123,43 +126,31 @@ def run_ruff_on_text(
         merge, where we must NOT delete code — isort never removes).
       - ``None`` → skip check entirely, format only.
 
-    The temp file lives in the project so ruff discovers the project's
-    ``[tool.ruff]`` config by walking up from the file's location.
+    ``src`` is piped over stdin with ``--stdin-filename`` set to ``rel_path``
+    (the file's project-relative path) and ``cwd=project_path``, so ruff
+    resolves the project's ``[tool.ruff]`` config AND applies its
+    ``per-file-ignores`` as if the content lived at the real path. The old
+    temp-file approach ran under a random name, which silently dropped
+    path-keyed rules — e.g. deps.py's F401 ignore — so regen deleted that
+    file's intentional re-export imports (issue #814 audit).
     """
     ruff = ruff_executable(project_path)
     if ruff is None:
         return None
-    tmp_path = ""
+    stdin_name = rel_path or "__aegis_ruff_normalize__.py"
+    current = src
+    steps: list[list[str]] = []
+    if check_select == "":
+        steps.append([ruff, "check", "--fix", "--quiet"])
+    elif check_select is not None:
+        steps.append([ruff, "check", "--fix", "--select", check_select, "--quiet"])
+    steps.append([ruff, "format", "--quiet"])
     try:
-        with tempfile.NamedTemporaryFile(
-            "w",
-            suffix=".py",
-            dir=str(project_path),
-            delete=False,
-            encoding="utf-8",
-        ) as handle:
-            handle.write(src)
-            tmp_path = handle.name
-        steps: list[list[str]] = []
-        if check_select == "":
-            steps.append([ruff, "check", "--fix", "--quiet", tmp_path])
-        elif check_select is not None:
-            steps.append(
-                [
-                    ruff,
-                    "check",
-                    "--fix",
-                    "--select",
-                    check_select,
-                    "--quiet",
-                    tmp_path,
-                ]
-            )
-        steps.append([ruff, "format", "--quiet", tmp_path])
         for args in steps:
             proc = run_resilient(
-                args,
+                [*args, "--stdin-filename", stdin_name, "-"],
                 cwd=str(project_path),
+                input=current.encode("utf-8"),
                 capture_output=True,
                 timeout=30,
                 retry_on_signal_kill=True,
@@ -182,12 +173,10 @@ def run_ruff_on_text(
                 not is_format and proc.returncode >= 2
             ):
                 return None
-        return Path(tmp_path).read_text(encoding="utf-8")
+            current = proc.stdout.decode("utf-8")
+        return current
     except (OSError, subprocess.SubprocessError):
         return None
-    finally:
-        if tmp_path:
-            Path(tmp_path).unlink(missing_ok=True)
 
 
 @dataclass
@@ -469,12 +458,30 @@ def sync_template_changes(
             ):
                 continue
 
-            # Only update existing files (new files handled by cleanup_nested)
-            if not project_file.exists():
-                continue
-
             try:
                 new_content = template_file.read_bytes()
+
+                # A file the template ships that the project doesn't have yet.
+                # cleanup_nested_project_directory() normally creates it from
+                # Copier's nested output — but Copier sometimes merges a new
+                # module's importers into existing files while failing to
+                # materialize the module itself, leaving a broken import graph
+                # (issue #775). When we have a changed-set, this file passed
+                # that filter above, so it's a genuine template addition for
+                # this version; create it from the new render as the reliable
+                # backstop. Without a changed-set (git diff failed) we can't
+                # tell an addition from a file the user deleted on purpose, so
+                # we defer to cleanup_nested and skip.
+                if not project_file.exists():
+                    if template_changed_files is None:
+                        verbose_print(f"   Skipped new file: {relative}")
+                        continue
+                    project_file.parent.mkdir(parents=True, exist_ok=True)
+                    project_file.write_bytes(new_content)
+                    result.synced.append(str(relative))
+                    verbose_print(f"   Created new file: {relative}")
+                    continue
+
                 project_content = project_file.read_bytes()
 
                 # No difference — nothing to do
@@ -514,10 +521,20 @@ def sync_template_changes(
                             project_file, old_file, template_file, relative, result
                         )
                 else:
-                    # No old render available — fall back to overwrite
-                    project_file.write_bytes(new_content)
-                    result.synced.append(str(relative))
-                    verbose_print(f"   Synced: {relative}")
+                    # No base render for this file — without the old version we
+                    # can't tell a user customization from a template change, so
+                    # overwriting risks silent data loss (issue #773). Preserve
+                    # the user's file, drop the new render beside it as a ``.rej``
+                    # (the same convention Copier conflicts use, so
+                    # ``analyze_conflict_files`` surfaces it in the report), and
+                    # report a conflict rather than a silent sync.
+                    rej_file = project_file.with_name(project_file.name + ".rej")
+                    rej_file.write_bytes(new_content)
+                    result.conflicts.append(str(relative))
+                    verbose_print(
+                        f"   No merge base — preserved {relative}, "
+                        f"template version written to {relative}.rej"
+                    )
 
             except OSError as e:
                 verbose_print(f"   Warning: Could not sync {relative}: {e}")
@@ -575,8 +592,9 @@ def _sync_python_file(
 
     # Full-rule normalization matches what ``make fix`` did to the project
     # file at init; comparison only, never written to disk.
-    project_norm = run_ruff_on_text(project_text, project_path, "")
-    old_norm = run_ruff_on_text(old_text, project_path, "")
+    rel = relative.as_posix()
+    project_norm = run_ruff_on_text(project_text, project_path, "", rel_path=rel)
+    old_norm = run_ruff_on_text(old_text, project_path, "", rel_path=rel)
     if project_norm is None or old_norm is None:
         _warn_raw_merge_fallback(relative)
         return False
@@ -591,7 +609,7 @@ def _sync_python_file(
         return True
 
     new_text = new_file.read_text(encoding="utf-8")
-    new_norm = run_ruff_on_text(new_text, project_path, "")
+    new_norm = run_ruff_on_text(new_text, project_path, "", rel_path=rel)
     if new_norm is not None and normalize_for_compare(old_norm) == (
         normalize_for_compare(new_norm)
     ):
@@ -603,9 +621,9 @@ def _sync_python_file(
     # formatted versions of all three sides so formatting noise cannot
     # conflict. ``--select I`` never deletes code, so the normalized ours
     # side is safe to write back to disk.
-    project_safe = run_ruff_on_text(project_text, project_path, "I")
-    old_safe = run_ruff_on_text(old_text, project_path, "I")
-    new_safe = run_ruff_on_text(new_text, project_path, "I")
+    project_safe = run_ruff_on_text(project_text, project_path, "I", rel_path=rel)
+    old_safe = run_ruff_on_text(old_text, project_path, "I", rel_path=rel)
+    new_safe = run_ruff_on_text(new_text, project_path, "I", rel_path=rel)
     if project_safe is None or old_safe is None or new_safe is None:
         _warn_raw_merge_fallback(relative)
         return False

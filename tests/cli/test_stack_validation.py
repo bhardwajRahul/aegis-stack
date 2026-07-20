@@ -110,8 +110,11 @@ def test_stack_full_validation(
         f"STDERR: {cli_install_result.stderr}"
     )
 
-    # Linting is allowed to surface fixable findings (rc=1) but not crash.
-    assert lint_result.returncode in [0, 1], (
+    # Lint runs ``ruff check --fix``, so anything auto-fixable is already gone;
+    # a non-zero exit means unfixable violations ship in generated output. Hold
+    # it to the same strictness as the dep / install / typecheck / pytest gates
+    # (issue #866) — a generated project must lint clean, not merely not crash.
+    assert lint_result.success, (
         f"Linting failed for {combination.description}\n"
         f"Duration: {lint_result.duration:.1f}s\n"
         f"Error: {lint_result.error_message}\n"
@@ -205,9 +208,10 @@ def test_full_stack_validation_pipeline(get_generated_stack: Any) -> None:
     passed = sum(1 for r in all_results if r.success)
     total_duration = sum(r.duration for r in all_results)
 
-    # All steps should pass (allowing linting to have fixable issues)
-    lint_result = quality_results[2]  # Linting result
-    critical_failures = [r for r in all_results if not r.success and r != lint_result]
+    # Every step must pass, lint included: ``ruff check --fix`` has already
+    # applied fixable findings, so a lint failure is an unfixable violation
+    # shipping in generated output (issue #866).
+    critical_failures = [r for r in all_results if not r.success]
 
     # Dump full stdout/stderr for any failing critical step. ``CLITestResult``'s
     # default ``__str__`` only renders a one-line summary, which is fine for

@@ -7,6 +7,7 @@ call ``asyncio.run`` on an async impl that opens its own session and constructs
 """
 
 import asyncio
+from typing import Any
 
 import typer
 
@@ -223,12 +224,28 @@ async def _import_file(
 
 
 @app.command()
-def sync(owner_user_id: int | None = _OWNER_OPT) -> None:
+def sync(
+    owner_user_id: int | None = _OWNER_OPT,
+    connection_id: int | None = typer.Option(
+        None,
+        "--connection-id",
+        "-c",
+        help="Sync one connection only (does not skip needs-attention ones).",
+    ),
+) -> None:
     """Refresh every provider connection (accounts, holdings, transactions)."""
-    asyncio.run(_sync(owner_user_id))
+    asyncio.run(_sync(owner_user_id, connection_id))
 
 
-async def _sync(owner_user_id: int | None) -> None:
+def _print_sync_result(result: Any) -> None:
+    console.print(
+        f"Connection #{result.connection_id}: {result.accounts} account(s), "
+        f"+{result.added} txn(s), {result.holdings} holding(s), "
+        f"{result.trades} trade(s)"
+    )
+
+
+async def _sync(owner_user_id: int | None, connection_id: int | None) -> None:
     from app.core.db import get_async_session
     from app.services.finance import connection_service
     from app.services.finance.providers.plaid import PlaidError
@@ -236,6 +253,16 @@ async def _sync(owner_user_id: int | None) -> None:
 
     async with get_async_session() as session:
         try:
+            if connection_id is not None:
+                result = await connection_service.sync_one_connection(
+                    session, connection_id, owner_user_id=owner_user_id
+                )
+                await session.commit()
+                if result is None:
+                    console.print(f"Connection #{connection_id} not found.")
+                    raise typer.Exit(code=1)
+                _print_sync_result(result)
+                return
             results = await connection_service.sync_owner_connections(
                 session, owner_user_id=owner_user_id
             )
@@ -247,11 +274,55 @@ async def _sync(owner_user_id: int | None) -> None:
         console.print("No provider connections to sync.")
         return
     for result in results:
-        console.print(
-            f"Connection #{result.connection_id}: {result.accounts} account(s), "
-            f"+{result.added} txn(s), {result.holdings} holding(s), "
-            f"{result.trades} trade(s)"
-        )
+        _print_sync_result(result)
+{%- endif %}
+{%- if finance_plaid %}
+
+
+@app.command("fire-webhook")
+def fire_webhook(
+    owner_user_id: int | None = _OWNER_OPT,
+    connection_id: int | None = typer.Option(
+        None, "--connection-id", "-c", help="Fire for one connection only."
+    ),
+    code: str = typer.Option(
+        "SYNC_UPDATES_AVAILABLE",
+        "--code",
+        help="Plaid webhook code to fire (e.g. DEFAULT_UPDATE).",
+    ),
+) -> None:
+    """Sandbox only: make Plaid deliver a real signed webhook.
+
+    End-to-end test of PLAID_WEBHOOK_URL, JWT verification, and dispatch
+    without waiting for new bank data. The URL must be reachable from the
+    internet (a tunnel in local dev - see .env.example).
+    """
+    asyncio.run(_fire_webhook(owner_user_id, connection_id, code))
+
+
+async def _fire_webhook(
+    owner_user_id: int | None, connection_id: int | None, code: str
+) -> None:
+    from app.core.db import get_async_session
+    from app.services.finance import connection_service
+    from app.services.finance.providers.plaid import PlaidError
+
+    async with get_async_session() as session:
+        try:
+            fired = await connection_service.fire_sandbox_webhook(
+                session,
+                owner_user_id=owner_user_id,
+                connection_id=connection_id,
+                webhook_code=code,
+            )
+        except PlaidError as exc:
+            console.print(f"[red]Webhook fire failed:[/] {exc}")
+            raise typer.Exit(code=1) from exc
+    if not fired:
+        console.print("No Plaid connections to fire a webhook for.")
+        return
+    for fired_id in fired:
+        console.print(f"Fired {code} for connection #{fired_id}")
 {%- endif %}
 {%- if finance_snaptrade %}
 

@@ -280,14 +280,6 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/core/security.py",
                 "app/cli/auth.py",
                 ".claude/skills/protect-an-endpoint",
-                # htmx web frontend auth surface. Owned here, not by the htmx
-                # component: these exist only when auth does, and an
-                # htmx-without-auth project must not carry them. The reverse
-                # gate (no htmx) is covered by the htmx spec owning the whole
-                # web_frontend tree, so dropping either one removes them.
-                "app/components/web_frontend/templates/pages/auth",
-                "app/components/web_frontend/templates/components/auth_macros.html",
-                "app/components/web_frontend/static/js/auth.js",
                 "tests/api/test_auth_endpoints.py",
                 "tests/services/test_auth_integration.py",
                 # Goal service is auth-coupled (Goal.user_id FK to user table);
@@ -312,16 +304,36 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/models/refresh_token.py",
                 "tests/components/test_frontend_auth_session.py",
                 "tests/services/test_refresh_service.py",
-                # Org sub-feature files. Part of the auth footprint (so
-                # add/remove cover them) and removed on the auth-off init
-                # path. The narrower "auth ON but auth_org OFF" cleanup stays
-                # inline in cleanup_components() (it gates on two answers).
-                "app/models/org.py",
-                "app/components/backend/api/orgs",
-                "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
-                "tests/services/test_org_integration.py",
-                "tests/api/test_org_endpoints.py",
+                "tests/test_factories_demo.py",
             ],
+            # Option-gated files live in extras, not primary: the add path
+            # copies an extras group only when its answer key is truthy
+            # (``get_component_files(answers=...)``), while removal and the
+            # spec-off init cleanup always cover the full footprint. Keeping
+            # these in primary shipped org stubs and htmx login pages into
+            # basic/non-htmx projects (issue #814).
+            extras={
+                # Org sub-feature files. The narrower "auth ON but auth_org
+                # OFF" cleanup stays inline in cleanup_components() (it gates
+                # on two answers).
+                "include_auth_org": [
+                    "app/models/org.py",
+                    "app/components/backend/api/orgs",
+                    "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
+                    "tests/services/test_org_integration.py",
+                    "tests/api/test_org_endpoints.py",
+                ],
+                # htmx web frontend auth surface. Owned here, not by the htmx
+                # component: these exist only when auth does, and an
+                # htmx-without-auth project must not carry them. The reverse
+                # gate (no htmx) is covered by the htmx spec owning the whole
+                # web_frontend tree, so dropping either one removes them.
+                "include_htmx": [
+                    "app/components/web_frontend/templates/pages/auth",
+                    "app/components/web_frontend/templates/components/auth_macros.html",
+                    "app/components/web_frontend/static/js/auth.js",
+                ],
+            },
         ),
     ),
     "ai": ServiceSpec(
@@ -450,6 +462,11 @@ SERVICES: dict[str, ServiceSpec] = {
             # memory backend, ollama=none, rag off) stay inline.
             primary=[
                 "app/components/backend/api/ai",
+                # LLM catalog API. Backend-conditional like ``app/cli/llm.py``
+                # below (both are stripped inline for the memory backend), so
+                # it rides in ``primary``; without it the retrofit path never
+                # copies the dir and the modal's catalog tab 404s (issue #814).
+                "app/components/backend/api/llm",
                 "app/services/ai",
                 "app/cli/ai.py",
                 "app/cli/ai_rendering.py",
@@ -474,7 +491,6 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/modals/ai_modal.py",
                 "app/components/frontend/dashboard/modals/ai_analytics_tab.py",
                 "app/components/frontend/dashboard/modals/llm_catalog_tab.py",
-                "app/components/frontend/dashboard/modals/rag_tab.py",
                 "tests/components/frontend/test_ai_analytics_utils.py",
                 "app/models/conversation.py",
             ],
@@ -488,6 +504,11 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/services/rag",
                     "app/cli/rag.py",
                     "tests/services/rag",
+                    # RAG-gated, so it belongs here rather than ``primary`` —
+                    # otherwise the retrofit copies it even with ``ai_rag``
+                    # off, rendering a dead RAG tab (issue #814). The modal's
+                    # ``_HAS_RAG`` import guard handles its absence.
+                    "app/components/frontend/dashboard/modals/rag_tab.py",
                 ],
                 "ai_voice": [
                     "app/components/backend/api/voice",
@@ -935,9 +956,12 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_finance_plaid.py",
                 "tests/services/test_finance_snaptrade.py",
                 "tests/services/test_finance_transfers.py",
+                "tests/services/test_finance_webhook_tunnel.py",
                 "tests/services/finance",
                 "tests/api/test_finance_endpoints.py",
                 "tests/cli/test_finance_cli.py",
+                "tests/components/frontend/test_finance_connect_menu.py",
+                "app/components/backend/startup/finance_webhook_tunnel.py",
             ],
         ),
     ),

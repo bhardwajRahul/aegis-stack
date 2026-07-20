@@ -767,6 +767,7 @@ MESSAGES: dict[str, str] = {
     "deploy.creating_backup": "バックアップ {timestamp} を作成中...",
     "deploy.backup_failed": "バックアップ作成失敗：{error}",
     "deploy.backup_db": "PostgreSQL データベースをバックアップ中...",
+    "deploy.backup_db_neon": "データベースは Neon が管理しています（ブランチ / ポイントインタイムリストア）。ローカルバックアップをスキップします",
     "deploy.backup_db_failed": (
         "警告：データベースバックアップ失敗、バックアップなしで続行"
     ),
@@ -836,6 +837,7 @@ MESSAGES: dict[str, str] = {
     "deploy.rollback_restoring": "バックアップ {timestamp} からファイルを復元中...",
     "deploy.rollback_restore_failed": "ファイル復元失敗：{error}",
     "deploy.rollback_db": "データベースを復元中...",
+    "deploy.rollback_db_neon": "データベースの復旧は Neon が管理しています（ブランチ / ポイントインタイムリストア）。ローカル復元をスキップします",
     "deploy.rollback_pg_wait": "PostgreSQL の準備完了を待機中...",
     "deploy.rollback_pg_timeout": (
         "PostgreSQL の準備が完了しませんでした、復元を試行します"

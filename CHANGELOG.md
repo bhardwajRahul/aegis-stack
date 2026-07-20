@@ -7,6 +7,60 @@
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-07-20
+
+### Added
+
+- **Neon-aware deploy**: `aegis deploy` now reads the project's Postgres
+  provider. For Neon projects it skips the local `pg_dump`/`psql` backup and
+  rollback-restore steps and states that database backup and recovery are
+  managed by Neon (branches, point-in-time restore) instead of silently
+  no-opping. Localized in all nine CLI languages.
+- **Orphan-proof organizations** (auth at the org level): deleting a user now
+  soft-deletes any organization they solely own (a hard delete purges it,
+  including its remaining invites and memberships), and a global admin can
+  delete any organization. Together these guarantee an org can never be
+  stranded with an unreachable owner. Cascaded deletions emit their own audit
+  events alongside the user deletion.
+- **Canonical brand palette**: generated apps single-source their brand
+  accents in a new `BrandPalette` (teal, dark teal, amber, red). The Flet
+  theme and the Pulse-style colors derive from it, fixing a drifted amber,
+  and a parity test keeps the aegis CLI palette locked to the same values.
+- **Finance service**: Plaid webhook tunnel auto-forwarding at startup,
+  expanded connection sync, and richer account and liability API responses.
+
+### Fixed
+
+- **`aegis update` never silently overwrites**: files with no merge base
+  (for example a service added after generation, or a failed old-template
+  render) are now preserved and reported as conflicts with the template
+  version written alongside as a `.rej` file, instead of being replaced with
+  the template render. Files newly added by a template version are reliably
+  created even when Copier fails to materialize them, so an update can no
+  longer merge a new module's imports without shipping the module.
+- **`aegis add`/`remove` converge on fresh-init output**: the Dockerfile
+  regenerates while pristine (the htmx `css-build` stage now tracks
+  add/remove htmx in both directions); stack-conditional wiring files
+  (auth gates on the metrics, task-history, and load-test endpoints, CLI
+  subcommand registration, scheduler job registration) regenerate instead of
+  staying stale; option-gated files (auth org files, htmx auth pages, the AI
+  RAG tab) are copied only when the project's configuration enables them;
+  and the model-and-migration skill plus the LLM catalog API are installed
+  when the first service that needs them arrives.
+- **Regeneration fidelity**: ruff normalization during add/remove/update now
+  runs under each file's real path so the generated project's
+  per-file-ignores stay in force (`deps.py` re-export imports are no longer
+  stripped), and regenerated files keep their trailing newline.
+- **Generated projects lint clean**: the stack matrix now fails on any ruff
+  violation in generated output (previously only a ruff crash failed it),
+  and the latent violations this exposed were fixed (a duplicate blog modal
+  method, an uppercase local variable in the insights collector, an unused
+  variable in the finance tests).
+- **AI service retrofit**: `aegis add-service ai` now ships the LLM catalog
+  API, omits the RAG tab unless RAG is enabled, and a dashboard card click
+  with no registered modal logs a warning naming the missing wiring instead
+  of doing nothing.
+
 ## [0.10.0] - 2026-07-16
 
 ### Added

@@ -13,6 +13,10 @@ services:
       # Host port auto-selected by `make serve` (WEBSERVER_HOST_PORT);
       # falls back to PORT for a raw `docker compose up`.
       - "${WEBSERVER_HOST_PORT:-${PORT:-8000}}:${PORT:-8000}"
+{%- if include_finance and finance_plaid %}
+    environment:
+      - PLAID_TUNNEL_METRICS_URL=http://plaid-tunnel:20241
+{%- endif %}
 {%- if include_ingress and ingress_tls %}
     labels:
       # Dev router (HTTP, localhost — no TLS)
@@ -110,6 +114,15 @@ services:
       - .:/code
     command:
       - build-watch
+    profiles:
+      - dev
+{%- endif %}
+{%- if include_finance and finance_plaid %}
+
+  plaid-tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:20241 --url http://webserver:${PORT:-8000}
+    restart: unless-stopped
     profiles:
       - dev
 {%- endif %}

@@ -66,11 +66,13 @@ class TestIterCleanupPaths:
 
         assert list(iter_cleanup_paths(_Bare(), selected=False)) == []
 
-    def test_extras_not_yielded_in_r1(self) -> None:
-        """R1 scope: extras are documentation-only; cleanup is primary-only.
+    def test_extras_yielded_when_not_selected(self) -> None:
+        """A spec that is off owns none of its files, gated or not.
 
-        See file_manifest.py module docstring. R2 lights up extras-driven
-        cleanup uniformly under the unified spec model.
+        Extras join the cleanup footprint (the R2 step the R1 test deferred):
+        option-gated files that are NOT empty-rendering — e.g. auth's htmx
+        login pages, plain HTML — would otherwise survive an init that never
+        selected the spec. See issue #814.
         """
         spec = _FakeSpec(
             name="ai",
@@ -79,7 +81,10 @@ class TestIterCleanupPaths:
                 extras={"ai_rag": ["app/services/rag"]},
             ),
         )
-        assert list(iter_cleanup_paths(spec, selected=False)) == ["app/services/ai"]
+        assert list(iter_cleanup_paths(spec, selected=False)) == [
+            "app/services/ai",
+            "app/services/rag",
+        ]
 
 
 class TestApplyCleanupPath:

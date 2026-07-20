@@ -764,12 +764,23 @@ class TestAuthPages:
 
     def test_auth_files_are_owned_by_the_auth_service(self) -> None:
         """htmx-without-auth must ship no auth pages or JS; the auth spec is
-        what removes them."""
+        what removes them.
+
+        Since issue #814 these live in the ``include_htmx`` extras group (so
+        the add path only copies them into projects that actually ship the
+        htmx frontend), but ownership is unchanged: the cleanup footprint
+        (primary + extras) still covers them, so removing auth removes them.
+        """
+        from aegis.core.component_files import get_component_cleanup_paths
         from aegis.core.services import SERVICES
 
-        primary = SERVICES["auth"].files.primary
-        assert "app/components/web_frontend/templates/pages/auth" in primary
-        assert "app/components/web_frontend/static/js/auth.js" in primary
+        htmx_extras = SERVICES["auth"].files.extras["include_htmx"]
+        assert "app/components/web_frontend/templates/pages/auth" in htmx_extras
+        assert "app/components/web_frontend/static/js/auth.js" in htmx_extras
+
+        cleanup = get_component_cleanup_paths("auth")
+        assert "app/components/web_frontend/templates/pages/auth" in cleanup
+        assert "app/components/web_frontend/static/js/auth.js" in cleanup
 
     def test_auth_pages_carry_no_pulse_copy(self) -> None:
         root = _web_frontend_tree() / "templates/pages/auth"

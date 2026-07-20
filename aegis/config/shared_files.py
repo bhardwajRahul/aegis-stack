@@ -16,7 +16,7 @@ is missing here, so a forgotten file surfaces as a loud test failure naming
 the file rather than as silently stale config in generated projects.
 """
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class SharedFilePolicy(TypedDict):
@@ -25,6 +25,9 @@ class SharedFilePolicy(TypedDict):
     overwrite: bool  # Whether to overwrite the file with regenerated content
     backup: bool  # Whether to create a backup before overwriting
     warn: bool  # Whether to warn user about manual merge needed
+    create: NotRequired[bool]  # Create when missing (default True). False for
+    # files whose existence is gated (component-owned, or inline-removed at
+    # init): regenerate them where they exist, never materialize them.
 
 
 # Default: regenerate the file, keeping a ``.backup`` first. Safe because the
@@ -35,9 +38,28 @@ DEFAULT_POLICY: SharedFilePolicy = {"overwrite": True, "backup": True, "warn": F
 # files users don't hand-edit (health dispatchers, db init hook, .dockerignore).
 _NO_BACKUP: SharedFilePolicy = {"overwrite": True, "backup": False, "warn": False}
 
-# Never overwrite (not even a merge) — only warn. For files users routinely
-# customize with content the template can't reproduce (custom build steps).
-_WARN_ONLY: SharedFilePolicy = {"overwrite": False, "backup": False, "warn": True}
+# Regenerate-in-place only: overwrite + backup like DEFAULT, but never create
+# the file when it's absent. For files whose *existence* is stack-gated —
+# component-owned files (scheduler/main.py) or files inline-removed at init —
+# where materializing them in a project without their owner would pollute it.
+_REGEN_EXISTING: SharedFilePolicy = {
+    "overwrite": True,
+    "backup": True,
+    "warn": False,
+    "create": False,
+}
+
+# Regenerate while pristine, warn-only once diverged. The middle ground between
+# DEFAULT (3-way merges divergence) and a pure warn (never touches the file):
+# the template partly owns this file's content, so an untouched copy must track
+# component toggles, but a user edit is preserved untouched rather than merged.
+# For the Dockerfile, whose htmx ``css-build`` stage the template owns yet users
+# also extend with custom build steps. See issue #870.
+_REGEN_IF_PRISTINE: SharedFilePolicy = {
+    "overwrite": True,
+    "backup": False,
+    "warn": True,
+}
 
 
 # Shared files handled with the default overwrite + backup policy. One line each.
@@ -84,6 +106,30 @@ _DEFAULT_POLICY_FILES: tuple[str, ...] = (
 )
 
 
+# Stack-conditional files promoted from the old INTENTIONALLY_NOT_REGENERATED
+# "(b) known gaps" allowlist (issue #814 audit). Their content varies with the
+# selection (auth gates on metrics/task-history, subcommand registration,
+# scheduler job registration), so leaving them stale shipped default-open
+# endpoints and never-running jobs after `aegis add`. They regenerate with the
+# no-create policy: some only exist in certain stacks (scheduler/main.py) and
+# a user-deleted one must stay deleted.
+_REGEN_EXISTING_FILES: tuple[str, ...] = (
+    "docs/components/api-load-testing.md",  # dir dropped at zero-component init
+    "app/cli/main.py",  # conditional subcommand registration
+    "app/cli/migrate_fix.py",
+    "app/i18n/registry.py",  # conditional translation-module registration
+    "app/components/backend/api/load_test_api.py",  # auth gate
+    "app/components/backend/api/metrics.py",  # auth gate (operator-only)
+    "app/components/backend/api/task_history.py",  # auth gate (PII, destructive)
+    "app/components/scheduler/main.py",  # insights/finance job registration
+    "app/services/load_test/__init__.py",
+    "tests/api/test_health_endpoints.py",
+    "tests/api/test_load_test_api_endpoints.py",
+    "tests/api/test_metrics_endpoints.py",
+    "tests/components/test_frontend_routing.py",  # auth-gated test body
+)
+
+
 # Files needing a non-default policy.
 _POLICY_OVERRIDES: dict[str, SharedFilePolicy] = {
     # Regenerate without a backup (derived/transient content).
@@ -92,8 +138,9 @@ _POLICY_OVERRIDES: dict[str, SharedFilePolicy] = {
     "app/services/system/health_db_sqlite.py": _NO_BACKUP,
     "app/services/system/health_db_postgres.py": _NO_BACKUP,
     "app/components/backend/startup/database_init.py": _NO_BACKUP,
-    # Warn instead of touching — users add custom build steps here.
-    "Dockerfile": _WARN_ONLY,
+    # Regenerate while pristine (keeps the htmx css-build stage in sync with
+    # add/remove htmx), warn-only once the user adds custom build steps.
+    "Dockerfile": _REGEN_IF_PRISTINE,
 }
 
 
@@ -101,6 +148,7 @@ _POLICY_OVERRIDES: dict[str, SharedFilePolicy] = {
 # so adding a file is a one-line change in the right list.
 SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
     **dict.fromkeys(_DEFAULT_POLICY_FILES, DEFAULT_POLICY),
+    **dict.fromkeys(_REGEN_EXISTING_FILES, _REGEN_EXISTING),
     **_POLICY_OVERRIDES,
 }
 

@@ -127,6 +127,52 @@ async def test_soft_delete_removes_from_listing(
 
 
 @pytest.mark.asyncio
+async def test_accounts_include_liability_detail_when_present(
+    async_client_with_db: TestClient, async_db_session: AsyncSession
+) -> None:
+    """FIN-23: credit accounts with liability data carry it in the accounts
+    listing; accounts without stay null (AMEX-graceful, no empty widget)."""
+    from datetime import date
+
+    from app.services.finance.models import FinanceLiabilityDetail
+
+    service = FinanceService(async_db_session)
+    card = await service.create_manual_account(
+        owner_user_id=1,
+        name="Chase Card",
+        account_type="credit_card",
+        classification="liability",
+    )
+    await service.create_manual_account(
+        owner_user_id=1,
+        name="AMEX Card",
+        account_type="credit_card",
+        classification="liability",
+    )
+    async_db_session.add(
+        FinanceLiabilityDetail(
+            owner_user_id=1,
+            account_id=card.id,
+            liability_type="credit",
+            last_statement_balance=170877,
+            minimum_payment_amount=3500,
+            next_payment_due_date=date(2026, 7, 15),
+            is_overdue=False,
+        )
+    )
+    await async_db_session.commit()
+
+    body = async_client_with_db.get("/api/v1/finance/accounts").json()
+    by_name = {a["name"]: a for a in body["items"]}
+    liability = by_name["Chase Card"]["liability"]
+    assert liability["minimum_payment_amount"] == 3500
+    assert liability["next_payment_due_date"] == "2026-07-15"
+    assert liability["last_statement_balance"] == 170877
+    assert liability["is_overdue"] is False
+    assert by_name["AMEX Card"]["liability"] is None
+
+
+@pytest.mark.asyncio
 async def test_unknown_account_returns_404(
     async_client_with_db: TestClient,
 ) -> None:

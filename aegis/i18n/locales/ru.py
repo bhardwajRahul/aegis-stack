@@ -755,6 +755,7 @@ MESSAGES: dict[str, str] = {
     "deploy.creating_backup": "Создание бэкапа {timestamp}...",
     "deploy.backup_failed": "Не удалось создать бэкап: {error}",
     "deploy.backup_db": "Резервное копирование БД PostgreSQL...",
+    "deploy.backup_db_neon": "Базой данных управляет Neon (ветки / восстановление на момент времени); локальный бэкап пропускается",
     "deploy.backup_db_failed": ("Внимание: бэкап БД не удался, продолжение без него"),
     "deploy.backup_created": "Бэкап создан: {timestamp}",
     "deploy.backup_pruned": "Удалён старый бэкап: {name}",
@@ -820,6 +821,7 @@ MESSAGES: dict[str, str] = {
     "deploy.rollback_restoring": "Восстановление файлов из бэкапа {timestamp}...",
     "deploy.rollback_restore_failed": "Не удалось восстановить файлы: {error}",
     "deploy.rollback_db": "Восстановление БД...",
+    "deploy.rollback_db_neon": "Восстановлением базы данных управляет Neon (ветки / восстановление на момент времени); локальное восстановление пропускается",
     "deploy.rollback_pg_wait": "Ожидание готовности PostgreSQL...",
     "deploy.rollback_pg_timeout": (
         "PostgreSQL не готов, попытка восстановления в любом случае"
