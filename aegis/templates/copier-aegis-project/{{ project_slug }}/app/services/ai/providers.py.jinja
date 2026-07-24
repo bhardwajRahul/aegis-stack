@@ -12,7 +12,7 @@ Uses LangChain chat models with support for multiple providers.
     openai extra, which is installed only for OpenAI-compatible providers.
     Skip these module-level imports otherwise (e.g. an anthropic-only build),
     or the module fails to import a package that was never installed. #}
-{%- set _has_openai = "openai" in ai_providers or "public" in ai_providers or "openrouter" in ai_providers or "ollama" in ai_providers or "mistral" in ai_providers or "cohere" in ai_providers %}
+{%- set _has_openai = "openai" in ai_providers or "public" in ai_providers or "pollinations" in ai_providers or "openrouter" in ai_providers or "ollama" in ai_providers or "mistral" in ai_providers or "cohere" in ai_providers %}
 
 import json
 import os
@@ -94,6 +94,10 @@ def _get_model_class(provider: AIProvider):
         from pydantic_ai.models.openai import OpenAIChatModel
 
         return OpenAIChatModel  # Public endpoints use OpenAI-compatible API
+    elif provider == AIProvider.POLLINATIONS:
+        from pydantic_ai.models.openai import OpenAIChatModel
+
+        return OpenAIChatModel  # Pollinations uses OpenAI-compatible API
     else:
         raise ProviderError(f"Unsupported provider: {provider}")
 
@@ -169,9 +173,15 @@ def get_agent(
         ProviderError: If agent creation fails
     """
     try:
-        # Special handling for PUBLIC provider (no API key required)
+        # Special handling for PUBLIC provider (anonymous tier works keyless;
+        # LLM7_API_KEY unlocks premium models)
         if config.provider == AIProvider.PUBLIC:
             return _create_public_agent(config, system_prompt_override)
+
+        # Special handling for POLLINATIONS provider (anonymous tier works
+        # keyless; POLLINATIONS_API_KEY selects an account tier)
+        if config.provider == AIProvider.POLLINATIONS:
+            return _create_pollinations_agent(config, system_prompt_override)
 
         # Special handling for OLLAMA provider (local, no API key required)
         if config.provider == AIProvider.OLLAMA:
@@ -184,7 +194,8 @@ def get_agent(
             raise ProviderError(
                 f"No API key configured for {config.provider}. "
                 f"Set {_get_env_var_name(config.provider)} environment variable. "
-                f"For free usage without API keys, try 'public' provider or Groq: https://console.groq.com/keys"
+                f"For free usage without API keys, try the keyless 'public' or "
+                f"'pollinations' providers, or Groq: https://console.groq.com/keys"
             )
 
         # Set environment variable for PydanticAI 1.0+ (they expect env vars)
@@ -312,20 +323,24 @@ def _create_public_agent(
         # Create custom HTTP client
         custom_http_client = FixedLLM7Client()
 
-        # Create the AsyncOpenAI client directly
+        from .public_provider import LLM7_BASE_URL, public_api_key
+
+        # Create the AsyncOpenAI client directly. LLM7.io requires a free
+        # account key since mid-2026; public_api_key() warns when unset.
         openai_client = AsyncOpenAI(
-            api_key="unused",
-            base_url="https://api.llm7.io/v1",
+            api_key=public_api_key(),
+            base_url=LLM7_BASE_URL,
             http_client=custom_http_client,
         )
 
         # Create provider using the custom openai_client
         provider = OpenAIProvider(openai_client=openai_client)
 
-        # Create OpenAI model using the provider
-        model_name = (
-            config.model if config.model and config.model != "auto" else "gpt-4o-mini"
-        )
+        # Create OpenAI model using the provider. "auto" resolves against
+        # LLM7's live catalog (their model list rotates).
+        from .public_provider import resolve_public_model
+
+        model_name = resolve_public_model(config.model)
         model = OpenAIChatModel(model_name=model_name, provider=provider)
 
         # Determine system prompt
@@ -357,6 +372,75 @@ def _create_public_agent(
             "   3. Switch: {{ project_slug }} ai config set-provider google"
         )
         logger.error(f"Failed to create PUBLIC agent: {e}")
+        raise ProviderError(error_msg) from e
+
+
+def _create_pollinations_agent(
+    config: AIServiceConfig,
+    system_prompt_override: str | None = None,
+) -> Agent:
+    """
+    Create agent for the POLLINATIONS provider (keyless anonymous tier).
+
+    Pollinations serves an OpenAI-compatible API; the anonymous tier
+    needs no key but rejects ANY Authorization header, so keyless
+    requests go through a client that strips it.
+
+    Args:
+        config: AI service configuration
+        system_prompt_override: Optional custom system prompt (for RAG mode)
+    """
+    # Lazy imports - only needed for POLLINATIONS provider
+    from openai import AsyncOpenAI
+
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    from .pollinations_provider import (
+        POLLINATIONS_BASE_URL,
+        anonymous_async_http_client,
+        pollinations_api_key,
+        resolve_pollinations_model,
+    )
+
+    try:
+        api_key = pollinations_api_key()
+        if api_key:
+            openai_client = AsyncOpenAI(
+                api_key=api_key, base_url=POLLINATIONS_BASE_URL
+            )
+        else:
+            # The SDK insists on a key; the anonymous client strips the
+            # resulting header before it reaches the wire.
+            openai_client = AsyncOpenAI(
+                api_key="unused",
+                base_url=POLLINATIONS_BASE_URL,
+                http_client=anonymous_async_http_client(),
+            )
+
+        provider = OpenAIProvider(openai_client=openai_client)
+        model_name = resolve_pollinations_model(config.model)
+        model = OpenAIChatModel(model_name=model_name, provider=provider)
+
+        system_prompt = system_prompt_override or (
+            "You are a helpful AI assistant powered by free public endpoints. "
+            "Provide clear, accurate, and concise responses. "
+            "Be friendly and professional."
+        )
+
+        return Agent(
+            model=model,
+            model_settings=_model_settings(config),
+            system_prompt=system_prompt,
+        )
+
+    except Exception as e:
+        error_msg = (
+            f"Pollinations endpoint failed ({e}). The keyless 'public' provider "
+            "(LLM7.io) is a drop-in alternative: "
+            "{{ project_slug }} ai config set-provider public"
+        )
+        logger.error(f"Failed to create POLLINATIONS agent: {e}")
         raise ProviderError(error_msg) from e
 
 
@@ -434,6 +518,7 @@ def _get_env_var_name(provider: AIProvider) -> str:
         AIProvider.COHERE: "COHERE_API_KEY",
         AIProvider.OLLAMA: "OLLAMA_API_KEY",
         AIProvider.PUBLIC: "PUBLIC_API_KEY",
+        AIProvider.POLLINATIONS: "POLLINATIONS_API_KEY",
     }
 
     result = env_var_map.get(provider)
@@ -454,6 +539,7 @@ def _set_provider_env_var(provider: AIProvider, api_key: str) -> None:
         AIProvider.COHERE: "COHERE_API_KEY",
         AIProvider.OLLAMA: "OLLAMA_API_KEY",
         AIProvider.PUBLIC: "PUBLIC_API_KEY",
+        AIProvider.POLLINATIONS: "POLLINATIONS_API_KEY",
     }
 
     env_var = env_var_map.get(provider)
@@ -488,6 +574,7 @@ def get_supported_providers() -> list[AIProvider]:
         AIProvider.COHERE,
         AIProvider.OLLAMA,
         AIProvider.PUBLIC,
+        AIProvider.POLLINATIONS,
     ]
 
 
@@ -561,6 +648,8 @@ def get_llm(config: AIServiceConfig, settings: Any):
             return _create_ollama_llm(config, settings)
         elif provider == AIProvider.PUBLIC:
             return _create_public_llm(config)
+        elif provider == AIProvider.POLLINATIONS:
+            return _create_pollinations_llm(config)
         else:
             raise ProviderError(f"Unsupported provider: {provider}")
 
@@ -715,20 +804,63 @@ def _create_ollama_llm(config: AIServiceConfig, settings: Any):
 
 
 def _create_public_llm(config: AIServiceConfig):
-    """Create LLM using free public endpoint (LLM7.io)."""
+    """Create LLM using the LLM7.io public endpoint (free account key)."""
     from langchain_openai import ChatOpenAI
 
-    model_name = (
-        config.model if config.model and config.model != "auto" else "gpt-4o-mini"
+    from .public_provider import (
+        LLM7_BASE_URL,
+        public_api_key,
+        resolve_public_model,
     )
+
+    model_name = resolve_public_model(config.model)
 
     return ChatOpenAI(
         model=model_name,
         temperature=config.temperature,
         max_tokens=config.max_tokens,
-        api_key="unused",
-        base_url="https://api.llm7.io/v1",
+        api_key=public_api_key(),
+        base_url=LLM7_BASE_URL,
         timeout=config.timeout_seconds,
+    )
+
+
+def _create_pollinations_llm(config: AIServiceConfig):
+    """Create LLM using the Pollinations endpoint (keyless anonymous tier)."""
+    from langchain_openai import ChatOpenAI
+
+    from .pollinations_provider import (
+        POLLINATIONS_BASE_URL,
+        anonymous_async_http_client,
+        anonymous_sync_http_client,
+        pollinations_api_key,
+        resolve_pollinations_model,
+    )
+
+    model_name = resolve_pollinations_model(config.model)
+    api_key = pollinations_api_key()
+
+    if api_key:
+        return ChatOpenAI(
+            model=model_name,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            api_key=api_key,
+            base_url=POLLINATIONS_BASE_URL,
+            timeout=config.timeout_seconds,
+        )
+
+    # Anonymous tier: Pollinations rejects ANY Authorization header, so
+    # both transports strip the SDK's required placeholder.
+    return ChatOpenAI(
+        model=model_name,
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        api_key="unused",
+        base_url=POLLINATIONS_BASE_URL,
+        timeout=config.timeout_seconds,
+        http_client=anonymous_sync_http_client(),
+        http_async_client=anonymous_async_http_client(),
     )
 
 
@@ -743,6 +875,7 @@ def validate_provider_support(provider: AIProvider) -> bool:
         AIProvider.COHERE,
         AIProvider.OLLAMA,
         AIProvider.PUBLIC,
+        AIProvider.POLLINATIONS,
     ]
     return provider in supported
 
@@ -758,5 +891,6 @@ def get_supported_providers() -> list[AIProvider]:
         AIProvider.COHERE,
         AIProvider.OLLAMA,
         AIProvider.PUBLIC,
+        AIProvider.POLLINATIONS,
     ]
 {% endif %}

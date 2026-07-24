@@ -16,6 +16,7 @@ from .section_card import SectionCard
 from .service_card import ServiceCard
 from .severity_filter import SeverityFilter
 from .status_dot import status_dot
+from .switch import ThemedSwitch
 from .table import (
     TableCellText,
     TableHeaderText,
@@ -92,4 +93,5 @@ __all__ = [
     "SeverityFilter",
     # Status indicators
     "status_dot",
+    "ThemedSwitch",
 ]
