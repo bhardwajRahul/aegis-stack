@@ -13,6 +13,7 @@ from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
     _bigint,
+    _OWNER_FK,
 )
 from sqlalchemy import (
     Index,
@@ -50,7 +51,7 @@ class FinanceAnalystSnapshot(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     as_of_date: date = Field()
 
     net_worth: int | None = _bigint("net_worth")
@@ -90,7 +91,7 @@ class FinanceTransactionChangelog(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     transaction_id: int = Field(foreign_key=f"{_FK}finance_transaction.id")
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     field: str
     old_value: str | None = Field(default=None)
     new_value: str | None = Field(default=None)

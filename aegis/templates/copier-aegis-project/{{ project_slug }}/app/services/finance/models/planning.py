@@ -14,6 +14,7 @@ from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
     _bigint,
+    _OWNER_FK,
 )
 from sqlalchemy import (
     JSON,
@@ -91,7 +92,7 @@ class FinanceRecurringStream(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     # Whose income this is: a parent's pension is not the household's,
     # and a resources answer has to be able to say so.
     subject_id: int | None = Field(
@@ -143,7 +144,7 @@ class FinanceRecurringStream(SQLModel, table=True):
     source: str = Field(max_length=12)
     deleted_at: datetime | None = Field(default=None)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -186,7 +187,7 @@ class FinanceBudget(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     organization_id: int | None = Field(default=None)
     name: str = Field(max_length=128)
     period: str = Field(max_length=16)
@@ -256,7 +257,7 @@ class FinanceBudgetCategory(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     budget_id: int = Field(foreign_key=f"{_FK}finance_budget.id")
     # NULL category + NULL payee_key = the budget's overall line.
     category_id: int | None = Field(
@@ -305,7 +306,7 @@ class FinanceSpendingBaseline(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     category_id: int | None = Field(
         default=None, foreign_key=f"{_FK}finance_category.id"
     )
@@ -358,7 +359,7 @@ class FinanceInsight(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     organization_id: int | None = Field(default=None)
     insight_type: str
     severity: str = Field(max_length=16)
@@ -383,12 +384,12 @@ class FinanceInsight(SQLModel, table=True):
     dedup_key: str
     period_start: date | None = Field(default=None)
     period_end: date | None = Field(default=None)
-    data: dict[str, Any] = Field(default_factory=dict, sa_column=Column("data", JSON))
+    data: dict[str, Any] = Field(default_factory=dict, sa_column=Column("data", JSON, nullable=False))
     status: str = Field(default="new", max_length=12)
     is_read: bool = Field(default=False)
     dismissed_at: datetime | None = Field(default=None)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

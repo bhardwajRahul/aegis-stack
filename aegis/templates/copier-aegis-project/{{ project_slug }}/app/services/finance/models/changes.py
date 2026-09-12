@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from app.core.time import utcnow
-from app.services.finance.models.base import _SCHEMA
+from app.services.finance.models.base import _SCHEMA, _OWNER_FK
 from sqlalchemy import JSON, CheckConstraint, Column, Index
 from sqlmodel import Field, SQLModel
 
@@ -40,7 +40,7 @@ class FinancePendingChange(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None)
     change_type: str = Field(max_length=64)
     payload: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("payload", JSON, nullable=False)

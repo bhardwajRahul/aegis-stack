@@ -11,6 +11,7 @@ from app.core.time import utcnow
 from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
+    _OWNER_FK,
 )
 from sqlalchemy import (
     BigInteger,
@@ -145,7 +146,7 @@ class FinanceSubject(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None)
     name: str = Field(max_length=128)
     kind: str = Field(default="person", max_length=16)
     note: str | None = None

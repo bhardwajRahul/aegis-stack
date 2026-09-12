@@ -45,6 +45,12 @@ _SCHEMA: str | None = {% if database_engine == "postgres" %}"finance"{% else %}N
 # is a redundant-condition diagnostic on SQLite stacks.
 _FK = {% if database_engine == "postgres" %}f"{_SCHEMA}."{% else %}""{% endif %}
 
+# Owner columns reference ``user.id`` only when the stack has auth; a finance
+# stack without it keeps ``owner_user_id`` as a plain nullable integer. This is
+# the fact the ``finance_auth_link`` migration used to bolt on afterwards, and
+# the models must state it themselves once they are the source of the schema.
+_OWNER_FK: str | None = {% if include_auth %}"user.id"{% else %}None{% endif %}
+
 
 def _bigint(name: str, *, nullable: bool = True, default: Any = None) -> Any:
     """A BigInteger money / scaled-integer column.

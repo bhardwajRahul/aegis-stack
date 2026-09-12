@@ -152,7 +152,7 @@ class InsightSource(SQLModel, table=True):
     enabled: bool = Field(default=True)
     last_collected_at: datetime | None = Field(default=None)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(
         default_factory=lambda: utcnow()
@@ -181,7 +181,7 @@ class InsightMetricType(SQLModel, table=True):
     display_name: str = Field(max_length=128)
     unit: str = Field(max_length=32)  # count, seconds, percentage, ratio, json
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(
         default_factory=lambda: utcnow()
@@ -235,7 +235,7 @@ class InsightMetric(SQLModel, table=True):
     value: float = Field(default=0.0)
     period: str = Field(max_length=32)  # daily, cumulative, snapshot, event
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(
         default_factory=lambda: utcnow()
@@ -268,7 +268,7 @@ class InsightRecord(SQLModel, table=True):
     previous_date: datetime | None = Field(default=None)
     context: str | None = Field(default=None, max_length=512)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     updated_at: datetime = Field(
         default_factory=lambda: utcnow()
@@ -515,7 +515,7 @@ class InsightEvent(SQLModel, table=True):
     )  # reddit_post, release, localization, external (collector); UserEventType (user)
     description: str = Field(max_length=1024)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     # Stored as a plain str on the Pydantic side (column is also plain
     # String(16)) — typing the field as `EventOrigin` causes Pydantic to

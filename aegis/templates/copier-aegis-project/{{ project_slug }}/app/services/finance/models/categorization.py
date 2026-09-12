@@ -13,6 +13,7 @@ from app.core.time import utcnow
 from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
+    _OWNER_FK,
 )
 from sqlalchemy import (
     JSON,
@@ -69,7 +70,7 @@ class FinanceCategory(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None)
     organization_id: int | None = Field(default=None)
     parent_id: int | None = Field(default=None, foreign_key=f"{_FK}finance_category.id")
     name: str = Field(max_length=128)
@@ -84,7 +85,7 @@ class FinanceCategory(SQLModel, table=True):
     sort_order: int = Field(default=0)
     tax_line: str | None = Field(default=None)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -110,7 +111,7 @@ class FinanceCategoryAlias(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None)
     category_id: int = Field(foreign_key=f"{_FK}finance_category.id")
     alias_text: str
     normalized_alias: str
@@ -170,7 +171,7 @@ class FinanceMerchant(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None)
     organization_id: int | None = Field(default=None)
     name: str = Field(max_length=255)
     normalized_name: str = Field(max_length=255)
@@ -226,7 +227,7 @@ class FinanceMerchantAlias(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None)
     merchant_id: int = Field(foreign_key=f"{_FK}finance_merchant.id")
     alias_text: str
     normalized_alias: str
@@ -257,7 +258,7 @@ class FinanceTag(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     organization_id: int | None = Field(default=None)
     name: str = Field(max_length=64)
     normalized_name: str = Field(max_length=64)
@@ -303,23 +304,23 @@ class FinanceRule(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     organization_id: int | None = Field(default=None)
     name: str = Field(max_length=128)
     priority: int = Field(default=100)
     is_enabled: bool = Field(default=True)
     conditions: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("conditions", JSON)
+        default_factory=dict, sa_column=Column("conditions", JSON, nullable=False)
     )
     actions: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("actions", JSON)
+        default_factory=dict, sa_column=Column("actions", JSON, nullable=False)
     )
     stop_processing: bool = Field(default=False)
     match_count: int = Field(default=0)
     last_matched_at: datetime | None = Field(default=None)
     deleted_at: datetime | None = Field(default=None)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

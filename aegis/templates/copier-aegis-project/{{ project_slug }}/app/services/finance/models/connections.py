@@ -14,6 +14,7 @@ from app.services.finance.models.base import (
     _ENCRYPTED_COLUMNS,
     _FK,
     _SCHEMA,
+    _OWNER_FK,
 )
 from sqlalchemy import (
     JSON,
@@ -68,10 +69,10 @@ class FinanceInstitution(SQLModel, table=True):
     uses_tokenized_account_numbers: bool = Field(default=False)
     uses_app_to_app: bool = Field(default=False)
     supported_products: list[Any] = Field(
-        default_factory=list, sa_column=Column("supported_products", JSON)
+        default_factory=list, sa_column=Column("supported_products", JSON, nullable=False)
     )
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -137,7 +138,7 @@ class FinanceConnection(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None, index=True)
+    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None, index=True)
     organization_id: int | None = Field(default=None, index=True)
     institution_id: int | None = Field(
         default=None, foreign_key=f"{_FK}finance_institution.id", index=True
@@ -157,7 +158,7 @@ class FinanceConnection(SQLModel, table=True):
     wallet_address: str | None = Field(default=None)
     wallet_chain: str | None = Field(default=None)
     capabilities: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("capabilities", JSON)
+        default_factory=dict, sa_column=Column("capabilities", JSON, nullable=False)
     )
     status: str = Field(default="healthy", max_length=24)
     status_detail: str | None = Field(default=None)
@@ -171,7 +172,7 @@ class FinanceConnection(SQLModel, table=True):
     removed_at: datetime | None = Field(default=None)
     deleted_at: datetime | None = Field(default=None, index=True)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -225,7 +226,7 @@ class FinanceWebhookEvent(SQLModel, table=True):
     webhook_code: str | None = Field(default=None)
     provider_event_id: str | None = Field(default=None)
     payload: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("payload", JSON)
+        default_factory=dict, sa_column=Column("payload", JSON, nullable=False)
     )
     status: str = Field(default="received", max_length=16)
     error: str | None = Field(default=None)

@@ -20,13 +20,12 @@ from sqlmodel import SQLModel
 
 from app.core.db import engine
 from app.i18n import t
+from app.core.model_registry import import_all_models  # noqa: E402
+
+import_all_models()
 
 {% if include_auth %}
 # Import models to register with SQLModel metadata
-from app.models.user import User, PasswordResetToken, EmailVerificationToken  # noqa: F401
-{% endif %}
-{% if include_auth_org %}
-from app.models.org import Organization, OrganizationMember, OrgInvite  # noqa: F401
 {% endif %}
 
 

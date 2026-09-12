@@ -16,7 +16,7 @@ from app.core.db import get_async_session
 from ..models import SpeechRequest, SpeechResult, TTSProvider
 from .config import TTSConfig, get_tts_config
 from .providers import BaseTTSProvider, get_tts_provider
-from .usage import TTSUsage
+from app.services.ai.models.voice_usage import TTSUsage
 
 logger = logging.getLogger(__name__)
 
