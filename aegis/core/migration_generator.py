@@ -4214,33 +4214,42 @@ def upgrade() -> None:
 {%- if schema %}
     op.execute('CREATE SCHEMA IF NOT EXISTS "{{ schema }}"')
 {%- endif %}
+    # SQLite projects run ``create_all`` at startup, so a table this
+    # revision creates may already exist when ``aegis update`` delivers
+    # the revision to an existing project. Skip per table so one chain
+    # serves both a pre-populated and a fresh database. Postgres is
+    # migration-only and never pre-creates, so the check is a no-op
+    # there. ``add_column`` on an existing table is deliberately NOT
+    # guarded: a duplicate column is a real conflict, not pre-creation.
+    _existing = set(sa.inspect(op.get_bind()).get_table_names({% if schema %}schema='{{ schema }}'{% endif %}))
 {% for table in tables %}
     # Create {{ table.name }} table
-    op.create_table(
-        '{{ table.name }}',
+    if '{{ table.name }}' not in _existing:
+        op.create_table(
+            '{{ table.name }}',
 {% for column in table.columns %}
 {% set pk_attr = ", primary_key=True" if column.primary_key else "" %}
 {% set default_attr = ", default=" ~ column.default if column.default else "" %}
-        sa.Column('{{ column.name }}', {{ column.type }}, nullable={{ column.nullable }}{{ pk_attr }}{{ default_attr }}),
+            sa.Column('{{ column.name }}', {{ column.type }}, nullable={{ column.nullable }}{{ pk_attr }}{{ default_attr }}),
 {% endfor %}
 {% if table.primary_keys %}
-        sa.PrimaryKeyConstraint({% for pk in table.primary_keys %}'{{ pk }}'{% if not loop.last %}, {% endif %}{% endfor %}){% if table.foreign_keys or table.check_constraints or schema %},{% endif %}
+            sa.PrimaryKeyConstraint({% for pk in table.primary_keys %}'{{ pk }}'{% if not loop.last %}, {% endif %}{% endfor %}){% if table.foreign_keys or table.check_constraints or schema %},{% endif %}
 
 {% endif %}
 {% for fk in table.foreign_keys %}
-        sa.ForeignKeyConstraint({{ fk.columns }}, ['{{ fk.ref_schema_qualified }}{{ fk.ref_table }}.{{ fk.ref_columns[0] }}']{% if fk.ondelete %}, ondelete='{{ fk.ondelete }}'{% endif %}){% if not loop.last or table.check_constraints or schema %},{% endif %}
+            sa.ForeignKeyConstraint({{ fk.columns }}, ['{{ fk.ref_schema_qualified }}{{ fk.ref_table }}.{{ fk.ref_columns[0] }}']{% if fk.ondelete %}, ondelete='{{ fk.ondelete }}'{% endif %}){% if not loop.last or table.check_constraints or schema %},{% endif %}
 
 {% endfor %}
 {% for chk in table.check_constraints %}
-        sa.CheckConstraint("{{ chk.sqltext }}", name='{{ chk.name }}'){% if not loop.last or schema %},{% endif %}
+            sa.CheckConstraint("{{ chk.sqltext }}", name='{{ chk.name }}'){% if not loop.last or schema %},{% endif %}
 
 {% endfor %}
 {%- if schema %}
-        schema='{{ schema }}',
+            schema='{{ schema }}',
 {%- endif %}
-    )
+        )
 {% for index in table.indexes %}
-    op.create_index(op.f('{{ index.name }}'), '{{ table.name }}', {{ index.columns }}{% if index.unique %}, unique=True{% endif %}{% if index.where %}, sqlite_where=sa.text("{{ index.where }}"), postgresql_where=sa.text("{{ index.where }}"){% endif %}{% if schema %}, schema='{{ schema }}'{% endif %})
+        op.create_index(op.f('{{ index.name }}'), '{{ table.name }}', {{ index.columns }}{% if index.unique %}, unique=True{% endif %}{% if index.where %}, sqlite_where=sa.text("{{ index.where }}"), postgresql_where=sa.text("{{ index.where }}"){% endif %}{% if schema %}, schema='{{ schema }}'{% endif %})
 {% endfor %}
 
 {% endfor %}

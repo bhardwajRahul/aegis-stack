@@ -34,6 +34,7 @@ from ..core.copier_updater import (
     validate_clean_git_tree,
 )
 from ..core.manual_updater import detect_insights_sources
+from ..core.migration_generator import generate_missing_migrations
 from ..core.post_gen_tasks import cleanup_components, run_post_generation_tasks
 from ..core.template_cleanup import (
     cleanup_nested_project_directory,
@@ -668,10 +669,31 @@ def update_command(
                 or include_documents
             )
 
+            # Migrations the project predates. A project generated before a
+            # revision existed never receives it otherwise: ``add-service``
+            # and ``ManualUpdater.add_service`` both call this, ``update``
+            # did not, so a v0.10.1 auth project kept ``001 -> 003`` with
+            # ``auth_tokens`` never written (#1024). Must run BEFORE the
+            # ``alembic upgrade head`` inside post-gen, or the DB is
+            # stamped past a revision that only lands afterwards.
+            if include_migrations:
+                for migration_path in generate_missing_migrations(target_path, answers):
+                    brand.success(
+                        f"   {t('add_service.generated_migration', name=migration_path.name)}"
+                    )
+
             typer.echo(t("update.running_postgen"))
+            postgen_report: dict[str, bool] = {}
             tasks_success = run_post_generation_tasks(
-                target_path, include_migrations=include_migrations
+                target_path,
+                include_migrations=include_migrations,
+                report=postgen_report,
             )
+            # A failed upgrade is non-fatal to generation but must not be
+            # reported as a clean update: the deployed app is what crashes
+            # (UndefinedColumnError on first request), not this command.
+            if postgen_report.get("migrations_ok") is False:
+                tasks_success = False
 
         # Update __aegis_version__ directly (Copier doesn't re-render unchanged files)
         init_file = target_path / "app" / "__init__.py"

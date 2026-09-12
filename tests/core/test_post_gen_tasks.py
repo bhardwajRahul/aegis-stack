@@ -355,6 +355,38 @@ class TestRunPostGenerationTasks:
 
             assert result is True  # Deps succeeded, so overall success
 
+    def test_migration_failure_is_reported_not_swallowed(self, tmp_path: Path) -> None:
+        """`run_migrations` returns False on a failed `alembic upgrade`, but
+        the caller discarded that value, so nothing upstream could tell.
+        `aegis update` then printed "completed successfully" over a
+        migration that never applied (#1024). The overall return stays
+        True (migrations are non-fatal, see the test above); the failure
+        must be exposed through a separate channel the caller can read.
+        """
+        with (
+            patch("aegis.core.post_gen_tasks.install_dependencies", return_value=True),
+            patch("aegis.core.post_gen_tasks.setup_env_file", return_value=True),
+            patch("aegis.core.post_gen_tasks.run_migrations", return_value=False),
+            patch("aegis.core.post_gen_tasks.format_code", return_value=True),
+        ):
+            outcome = run_post_generation_tasks(
+                tmp_path, include_migrations=True, report=(report := {})
+            )
+
+            assert outcome is True
+            assert report["migrations_ok"] is False
+
+        with (
+            patch("aegis.core.post_gen_tasks.install_dependencies", return_value=True),
+            patch("aegis.core.post_gen_tasks.setup_env_file", return_value=True),
+            patch("aegis.core.post_gen_tasks.run_migrations", return_value=True),
+            patch("aegis.core.post_gen_tasks.format_code", return_value=True),
+        ):
+            run_post_generation_tasks(
+                tmp_path, include_migrations=True, report=(report := {})
+            )
+            assert report["migrations_ok"] is True
+
     def test_auth_migrations_triggered(self, tmp_path: Path) -> None:
         """Test that migrations run when auth is enabled."""
         with (
