@@ -541,6 +541,46 @@ class TestUpdateCommandRollback:
         assert mock_create_backup.called, "Backup should be created"
         assert mock_cleanup.called, "Cleanup should be called when backup was created"
 
+    @patch("aegis.commands.update.sync_template_changes")
+    @patch("aegis.commands.update.run_post_generation_tasks")
+    @patch("aegis.commands.update.generate_missing_migrations")
+    @patch("copier.run_update")
+    @patch("aegis.commands.update.get_current_template_commit")
+    @patch("aegis.commands.update.create_backup_point")
+    def test_update_generates_migrations_the_project_predates(
+        self,
+        mock_create_backup: MagicMock,
+        mock_get_commit: MagicMock,
+        mock_copier_update: MagicMock,
+        mock_generate: MagicMock,
+        mock_post_gen: MagicMock,
+        mock_sync: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """A project generated before a migration existed must receive it on
+        update. `add-service` already calls `generate_missing_migrations`
+        for exactly this; `update` never did, so a v0.10.1 auth project
+        updated to HEAD kept its `001 -> 003` chain with `auth_tokens`
+        never written (#1024)."""
+        mock_create_backup.return_value = None
+        mock_get_commit.return_value = "different-commit"
+        mock_post_gen.return_value = True
+        mock_sync.return_value = SyncResult()
+        mock_generate.return_value = []
+
+        project_path = project_factory("base_with_auth_service")
+
+        run_aegis_command("update", "--project-path", str(project_path), "--yes")
+
+        assert mock_generate.called, (
+            "update must generate migrations the project predates"
+        )
+        # It must run BEFORE the alembic upgrade in post-gen, or the new
+        # revision is written after the DB was already stamped past it.
+        # macOS hands the fixture a /var path and the command resolves it
+        # to /private/var; compare identities, not spellings.
+        assert mock_generate.call_args[0][0].resolve() == project_path.resolve()
+
     @patch("aegis.commands.update.rollback_to_backup")
     @patch("aegis.commands.update.create_backup_point")
     @patch("copier.run_update")

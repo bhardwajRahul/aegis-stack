@@ -1795,3 +1795,101 @@ class TestPluginMigrations:
         assert len(first) == 1
         assert second == []
         assert len(list((tmp_path / "alembic" / "versions").glob("*.py"))) == 1
+
+
+class TestMigrationsAreIdempotentOnPrepopulatedSQLite:
+    """SQLite projects run ``SQLModel.metadata.create_all`` at startup
+    (``app/core/db.py``), so their database already holds every table the
+    models define - ahead of any migration. A revision the project predates
+    is then delivered by ``aegis update`` and its ``create_table`` collides
+    with a table ``create_all`` already made (#1024: ``table
+    password_reset_token already exists``).
+
+    Postgres projects are migration-only and never hit this, so the guard
+    is exactly what the ticket asked for: inspector-checked per table, one
+    chain serving both a pre-populated and a fresh database.
+    """
+
+    def _apply(self, source: str, url: str) -> None:
+        """Execute a rendered migration's ``upgrade()`` against ``url``."""
+        import sys
+        import types
+
+        import sqlalchemy as sa
+        from alembic.migration import MigrationContext
+        from alembic.operations import Operations
+
+        # Rendered migrations ``import sqlmodel`` (a generated-project
+        # dependency the framework venv does not carry). Only ``upgrade()``
+        # is under test, so a stub module satisfies the import.
+        stub = types.ModuleType("sqlmodel")
+        stub.sql = types.ModuleType("sqlmodel.sql")  # type: ignore[attr-defined]
+        stub.sql.sqltypes = types.ModuleType("sqlmodel.sql.sqltypes")  # type: ignore[attr-defined]
+        stub.sql.sqltypes.AutoString = sa.String  # type: ignore[attr-defined]
+        saved = {
+            k: sys.modules.get(k)
+            for k in ("sqlmodel", "sqlmodel.sql", "sqlmodel.sql.sqltypes")
+        }
+        sys.modules["sqlmodel"] = stub
+        sys.modules["sqlmodel.sql"] = stub.sql  # type: ignore[attr-defined]
+        sys.modules["sqlmodel.sql.sqltypes"] = stub.sql.sqltypes  # type: ignore[attr-defined]
+        try:
+            engine = sa.create_engine(url)
+            with engine.begin() as conn:
+                ctx = MigrationContext.configure(conn)
+                with Operations.context(ctx):
+                    ns: dict = {}
+                    exec(compile(source, "<migration>", "exec"), ns)
+                    ns["upgrade"]()
+            engine.dispose()
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v
+
+    def test_create_table_skips_tables_create_all_already_made(
+        self, tmp_path: Path
+    ) -> None:
+        import sqlalchemy as sa
+
+        url = f"sqlite:///{tmp_path / 'app.db'}"
+        source = _render_migration(AUTH_TOKENS_MIGRATION, "004", "003")
+
+        # First application: fresh DB, everything created.
+        self._apply(source, url)
+        engine = sa.create_engine(url)
+        names = set(sa.inspect(engine).get_table_names())
+        assert "password_reset_token" in names
+        assert "email_verification_token" in names
+        engine.dispose()
+
+        # Second application against the SAME database: every table now
+        # pre-exists, exactly the state ``create_all`` leaves a SQLite
+        # project in. Must not raise "already exists".
+        self._apply(source, url)
+
+    def test_add_column_on_existing_table_still_fails_loudly(
+        self, tmp_path: Path
+    ) -> None:
+        """The table guard must NOT extend to ``add_column``: a column that
+        already exists is a real schema conflict (#1023-shaped), not
+        ``create_all`` pre-creation, and hiding it would hide the bug."""
+        import pytest
+        import sqlalchemy as sa
+
+        url = f"sqlite:///{tmp_path / 'app.db'}"
+        engine = sa.create_engine(url)
+        with engine.begin() as conn:
+            conn.execute(sa.text("CREATE TABLE t (id INTEGER PRIMARY KEY, x TEXT)"))
+        engine.dispose()
+
+        source = (
+            "from alembic import op\nimport sqlalchemy as sa\n"
+            "def upgrade():\n"
+            "    with op.batch_alter_table('t') as b:\n"
+            "        b.add_column(sa.Column('x', sa.String(), nullable=True))\n"
+        )
+        with pytest.raises(Exception):
+            self._apply(source, url)

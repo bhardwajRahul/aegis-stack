@@ -28,7 +28,8 @@ def _converter(engine: str) -> Any:
     source = env.get_template("{{ project_slug }}/app/core/db.py.jinja").render(ctx)
     tree = ast.parse(source)
     fn = next(
-        n for n in tree.body
+        n
+        for n in tree.body
         if isinstance(n, ast.FunctionDef) and n.name == "_get_async_database_url"
     )
     ns: dict[str, Any] = {}

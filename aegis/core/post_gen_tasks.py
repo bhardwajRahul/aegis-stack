@@ -1080,6 +1080,7 @@ def run_post_generation_tasks(
     skip_llm_sync: bool = False,
     project_slug: str | None = None,
     reporter: "BuildReporter | None" = None,
+    report: dict[str, bool] | None = None,
 ) -> bool:
     """
     Run all post-generation tasks for a project.
@@ -1138,7 +1139,14 @@ def run_post_generation_tasks(
     # Task 3: Run migrations if needed (non-critical)
     if reporter is not None and include_migrations:
         reporter.step("migrate", t("build.step.migrate"), "alembic upgrade head")
-    run_migrations(project_path, include_migrations, python_version)
+    # Non-fatal by design (see ``test_non_critical_failures_continue``): a
+    # failed upgrade must not fail generation. But the caller has to be
+    # able to see it - ``aegis update`` used to print "completed
+    # successfully" over a migration that never applied (#1024). The
+    # overall bool keeps its contract; the detail goes in ``report``.
+    migrations_ok = run_migrations(project_path, include_migrations, python_version)
+    if report is not None:
+        report["migrations_ok"] = migrations_ok
     if reporter is not None and include_migrations:
         reporter.done("migrate")
 
