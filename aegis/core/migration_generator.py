@@ -16,6 +16,8 @@ Usage:
         generate_migration(project_path, "ai")
 """
 
+import os
+import subprocess
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -4592,28 +4594,73 @@ def _gate_schema(
     return spec
 
 
+class MigrationGenerationError(RuntimeError):
+    """The project's revision generator failed; carries its stderr."""
+
+
+GENERATE_REVISIONS_TIMEOUT = 300
+
+
+def generate_revisions(
+    project_path: Path,
+    services: list[str],
+    python_version: str | None = None,
+) -> list[Path]:
+    """Derive revisions from the project's models, one per service.
+
+    The models live in the project and import its dependencies, so the
+    generator (``app/cli/migrate_gen.py``) runs in the project's venv via
+    ``uv run --project``; aegis itself never renders a table. A service
+    whose tables are already covered by an earlier revision produces no
+    file, which is what makes re-running this idempotent.
+
+    Returns the revision files this call wrote, in name order.
+    """
+    if not services:
+        return []
+    versions_dir = get_versions_dir(project_path)
+    versions_dir.mkdir(parents=True, exist_ok=True)
+    before = set(versions_dir.glob("*.py"))
+    env = os.environ.copy()
+    env.pop("VIRTUAL_ENV", None)
+    # UV_PYTHON pins the interpreter for the *aegis* tool (3.11 in CI and
+    # the release jobs). The generated project has its own requires-python
+    # and must be allowed to resolve its own; inheriting the pin fails the
+    # run outright on a project that asks for 3.14.
+    env.pop("UV_PYTHON", None)
+    cmd = ["uv", "run", "--project", str(project_path)]
+    if python_version:
+        cmd.extend(["--python", python_version])
+    cmd.extend(["python", "-m", "app.cli.migrate_gen", *services])
+    result = subprocess.run(
+        cmd,
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+        timeout=GENERATE_REVISIONS_TIMEOUT,
+        env=env,
+    )
+    if result.returncode != 0:
+        raise MigrationGenerationError(
+            f"migrate_gen failed for {', '.join(services)}:\n{result.stderr[-2000:]}"
+        )
+    return sorted(set(versions_dir.glob("*.py")) - before)
+
+
 def generate_migration(
     project_path: Path,
     service_name: str,
     context: dict[str, Any] | None = None,
 ) -> Path | None:
-    """
-    Generate a migration file for a service.
+    """Write the revision for one service, derived from the project's models.
 
-    Args:
-        project_path: Path to the project directory
-        service_name: Name of the service (e.g., "auth", "ai")
-        context: Optional generation context (copier flags). Used to pick
-            between spec variants — e.g. ``insights_per_user`` toggles the
-            insights spec between shared and per-user shape.
-
-    Returns:
-        Path to the generated migration file, or None if service not found
+    ``context`` is accepted for callers that still pass it; the models
+    already carry every engine and variant decision. Returns the file
+    written, or None when the service's tables are all in earlier revisions.
     """
-    spec = _resolve_spec(service_name, context)
-    if spec is None:
-        return None
-    return _write_migration(project_path, spec)
+    del context
+    written = generate_revisions(project_path, [service_name])
+    return written[0] if written else None
 
 
 def _write_migration(project_path: Path, spec: ServiceMigrationSpec) -> Path:
@@ -4638,16 +4685,7 @@ def generate_missing_migrations(
     now say ``auth_level: org``, so ``auth_rbac`` and ``auth_org`` are
     needed and missing. Shared by ``add-service`` and the resolver's
     ``ManualUpdater.add_service`` so both tails agree."""
-    written: list[Path] = []
-    specs = _get_migration_specs()
-    for service_name in get_services_needing_migrations(answers):
-        if service_name in specs and not service_has_migration(
-            project_path, service_name
-        ):
-            path = generate_migration(project_path, service_name, answers)
-            if path is not None:
-                written.append(path)
-    return written
+    return generate_revisions(project_path, get_services_needing_migrations(answers))
 
 
 def generate_plugin_migrations(
@@ -4666,12 +4704,9 @@ def generate_plugin_migrations(
 
     Returns the paths written, in declaration order.
     """
-    written: list[Path] = []
-    for migration in getattr(plugin_spec, "migrations", None) or []:
-        if service_has_migration(project_path, migration.service_name):
-            continue
-        written.append(_write_migration(project_path, _gate_schema(migration, context)))
-    return written
+    del context
+    names = [m.service_name for m in getattr(plugin_spec, "migrations", None) or []]
+    return generate_revisions(project_path, names)
 
 
 def generate_migrations_for_services(
@@ -4691,22 +4726,8 @@ def generate_migrations_for_services(
     Returns:
         List of paths to generated migration files
     """
-    generated = []
-    migration_specs = _get_migration_specs()
-
-    for service_name in services:
-        if service_name not in migration_specs:
-            continue
-
-        # Skip if migration already exists
-        if service_has_migration(project_path, service_name):
-            continue
-
-        migration_path = generate_migration(project_path, service_name, context)
-        if migration_path:
-            generated.append(migration_path)
-
-    return generated
+    del context
+    return generate_revisions(project_path, services)
 
 
 def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
@@ -4837,19 +4858,16 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     if include_finance_on and include_auth_on:
         services.append("finance_auth_link")
 
-    # Scheduler component — the job_execution history table. Postgres ONLY:
-    # the table lives in a ``scheduler`` schema, and the migration emits
-    # ``CREATE SCHEMA`` which SQLite can't run. SQLite scheduler stacks
-    # create the (unqualified) table via SQLModel.metadata.create_all
-    # instead, so they need no migration file. A component, not a service,
-    # but it rides the same rail. Appended last: no FK to any service table.
+    # Scheduler component: its job store and execution-history tables, on
+    # any persistent backend. A component, not a service, but it rides the
+    # same rail. Appended last: no FK to any service table.
     include_scheduler = context.get(AnswerKeys.SCHEDULER)
     scheduler_backend = context.get(
         AnswerKeys.SCHEDULER_BACKEND, StorageBackends.MEMORY
     )
     if (
         include_scheduler == "yes" or include_scheduler is True
-    ) and scheduler_backend == StorageBackends.POSTGRES:
+    ) and scheduler_backend != StorageBackends.MEMORY:
         services.append("scheduler")
 
     # Per-user vs shared insights is one folded migration — generation
@@ -4863,6 +4881,8 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
 # ============================================================================
 
 # Files to create when bootstrapping alembic infrastructure
+ALEMBIC_PIN = "alembic==1.16.5"
+
 ALEMBIC_TEMPLATE_FILES = [
     "alembic/alembic.ini",
     "alembic/env.py",
@@ -4927,4 +4947,29 @@ def bootstrap_alembic(
     if not gitkeep.exists():
         gitkeep.touch()
 
+    _pin_alembic(project_path)
     return created_files
+
+
+def _pin_alembic(project_path: Path) -> None:
+    """Add alembic to the project's dependencies if it isn't there.
+
+    A project whose answers call for no migrations ships without alembic;
+    a plugin that declares migrations makes it need one. The template's
+    own gate covers in-tree services (the answers change and pyproject is
+    re-rendered), but a plugin is not an answer. ``uv run`` syncs the
+    environment before the generator runs, so writing the pin is enough.
+    """
+    pyproject = project_path / "pyproject.toml"
+    if not pyproject.is_file():
+        return
+    content = pyproject.read_text()
+    marker = "dependencies = [\n"
+    if marker not in content:
+        return
+    head, _, tail = content.partition(marker)
+    # Only the dependency list decides: every database project also names
+    # alembic in its poe tasks further down the file.
+    if "alembic" in tail[: tail.index("]")]:
+        return
+    pyproject.write_text(f'{head}{marker}    "{ALEMBIC_PIN}",\n{tail}')

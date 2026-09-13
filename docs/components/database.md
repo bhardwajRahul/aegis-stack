@@ -171,7 +171,21 @@ Database schema changes are managed with [Alembic](https://alembic.sqlalchemy.or
 ```bash
 # After creating/modifying models
 alembic revision --autogenerate -m "Add shields table"
+
+# Or let the project derive it, the same way `aegis add` does
+uv run python -m app.cli.migrate_gen <service>
 ```
+
+The models are the source of the schema: `aegis init` and `aegis add` derive
+every revision they write from the SQLModel classes. To check that nothing has
+drifted, replay the revisions onto a scratch database and diff:
+
+```bash
+uv run python -m app.cli.migrate_gen --check
+```
+
+Empty output means the revisions rebuild the models exactly;
+`tests/test_model_registry.py` asserts it on every test run.
 
 ### Apply Migrations
 

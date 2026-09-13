@@ -14,5 +14,6 @@ class ConformanceRow(SQLModel, table=True):
 {%- endif %}
 
     id: int | None = Field(default=None, primary_key=True)
-    label: str = Field(max_length=64)
+    # Indexed, so the plugin exercises index generation too.
+    label: str = Field(max_length=64, index=True)
     created_at: datetime = Field(default_factory=utcnow)

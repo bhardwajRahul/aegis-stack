@@ -436,3 +436,69 @@ class TestRunPostGenerationTasks:
             run_post_generation_tasks(tmp_path, include_migrations=True)
 
             assert call_order == ["deps", "env", "migrations", "format"]
+
+
+class TestRevisionsDerivedInsideTheProjectVenv:
+    """Revision files come from the models, so they are written after the
+    venv exists and before ``alembic upgrade head`` applies them."""
+
+    def test_revisions_run_between_install_and_migrate(self, tmp_path: Path) -> None:
+        order: list[str] = []
+        with (
+            patch(
+                "aegis.core.post_gen_tasks.install_dependencies",
+                side_effect=lambda *_a, **_k: order.append("install") or True,
+            ),
+            patch("aegis.core.post_gen_tasks.setup_env_file", return_value=True),
+            patch(
+                "aegis.core.post_gen_tasks.generate_revisions",
+                side_effect=lambda *_a, **_k: order.append("revisions") or [],
+            ) as gen,
+            patch(
+                "aegis.core.post_gen_tasks.run_migrations",
+                side_effect=lambda *_a, **_k: order.append("migrate") or True,
+            ),
+            patch("aegis.core.post_gen_tasks.format_code", return_value=True),
+        ):
+            run_post_generation_tasks(
+                tmp_path,
+                include_migrations=True,
+                migration_services=["auth", "finance"],
+                python_version="3.13",
+            )
+        assert order == ["install", "revisions", "migrate"]
+        assert gen.call_args.args[:2] == (tmp_path, ["auth", "finance"])
+        assert gen.call_args.kwargs.get("python_version") == "3.13"
+
+    def test_no_services_means_no_revision_step(self, tmp_path: Path) -> None:
+        with (
+            patch("aegis.core.post_gen_tasks.install_dependencies", return_value=True),
+            patch("aegis.core.post_gen_tasks.setup_env_file", return_value=True),
+            patch("aegis.core.post_gen_tasks.generate_revisions") as gen,
+            patch("aegis.core.post_gen_tasks.run_migrations", return_value=True),
+            patch("aegis.core.post_gen_tasks.format_code", return_value=True),
+        ):
+            run_post_generation_tasks(tmp_path, include_migrations=False)
+        gen.assert_not_called()
+
+    def test_generation_failure_is_reported_not_raised(self, tmp_path: Path) -> None:
+        from aegis.core.migration_generator import MigrationGenerationError
+
+        report: dict[str, bool] = {}
+        with (
+            patch("aegis.core.post_gen_tasks.install_dependencies", return_value=True),
+            patch("aegis.core.post_gen_tasks.setup_env_file", return_value=True),
+            patch(
+                "aegis.core.post_gen_tasks.generate_revisions",
+                side_effect=MigrationGenerationError("boom"),
+            ),
+            patch("aegis.core.post_gen_tasks.run_migrations", return_value=True) as mig,
+            patch("aegis.core.post_gen_tasks.format_code", return_value=True),
+        ):
+            run_post_generation_tasks(
+                tmp_path, include_migrations=True, migration_services=["auth"], report=report
+            )
+        assert report["revisions_ok"] is False
+        # the upgrade is skipped: a DB must not be stamped past revisions
+        # that never landed
+        assert mig.call_args.args[1] is False

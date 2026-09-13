@@ -360,6 +360,7 @@ MESSAGES: dict[str, str] = {
         "и выполните «alembic upgrade head» вручную."
     ),
     "postgen.db_failed": "Внимание: настройка миграций не удалась",
+    "postgen.revisions_failed": "Не удалось создать ревизии на основе моделей",
     "postgen.db_manual": "Выполните «alembic upgrade head» вручную после создания проекта",
     "postgen.db_timeout": (
         "Внимание: таймаут миграции — выполните «alembic upgrade head» вручную"
@@ -1150,6 +1151,7 @@ MESSAGES: dict[str, str] = {
     "build.step.render": "Создание файлов проекта",
     "build.step.deps": "Установка зависимостей",
     "build.step.env": "Настройка окружения",
+    "build.step.revisions": "Создание ревизий на основе моделей",
     "build.step.migrate": "Применение миграций",
     "build.step.llm": "Синхронизация каталога LLM",
     "build.step.format": "Форматирование кода",

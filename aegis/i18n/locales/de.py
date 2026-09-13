@@ -378,6 +378,7 @@ MESSAGES: dict[str, str] = {
         "und führe 'alembic upgrade head' manuell aus."
     ),
     "postgen.db_failed": "Warnung: Datenbankmigration fehlgeschlagen",
+    "postgen.revisions_failed": "Revisionen konnten nicht aus den Modellen abgeleitet werden",
     "postgen.db_manual": "Führe 'alembic upgrade head' manuell nach Projekterstellung aus",
     "postgen.db_timeout": (
         "Warnung: Timeout bei Migrationseinrichtung – 'alembic upgrade head' manuell ausführen"
@@ -1183,6 +1184,7 @@ MESSAGES: dict[str, str] = {
     "build.step.render": "Projektdateien werden erstellt",
     "build.step.deps": "Abhängigkeiten werden installiert",
     "build.step.env": "Umgebungskonfiguration",
+    "build.step.revisions": "Revisionen werden aus den Modellen abgeleitet",
     "build.step.migrate": "Migrationen werden angewendet",
     "build.step.llm": "LLM-Katalog wird synchronisiert",
     "build.step.format": "Code wird formatiert",

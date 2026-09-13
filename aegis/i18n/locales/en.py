@@ -388,6 +388,7 @@ MESSAGES: dict[str, str] = {
         "and run 'alembic upgrade head' manually."
     ),
     "postgen.db_failed": "Warning: Database migration setup failed",
+    "postgen.revisions_failed": "Could not derive revisions from the models",
     "postgen.db_manual": "Run 'alembic upgrade head' manually after project creation",
     "postgen.db_timeout": (
         "Warning: Migration setup timeout - run 'alembic upgrade head' manually"
@@ -1290,6 +1291,7 @@ MESSAGES: dict[str, str] = {
     "build.step.render": "Rendering project files",
     "build.step.deps": "Installing dependencies",
     "build.step.env": "Environment configuration",
+    "build.step.revisions": "Deriving revisions from models",
     "build.step.migrate": "Applying migrations",
     "build.step.llm": "Syncing LLM catalog",
     "build.step.format": "Formatting code",

@@ -380,6 +380,7 @@ MESSAGES: dict[str, str] = {
         "existe et exécutez « alembic upgrade head » manuellement."
     ),
     "postgen.db_failed": "Attention : la configuration des migrations a échoué",
+    "postgen.revisions_failed": "Impossible de dériver les révisions depuis les modèles",
     "postgen.db_manual": "Exécutez « alembic upgrade head » manuellement après la création du projet",
     "postgen.db_timeout": (
         "Attention : délai de configuration des migrations dépassé - exécutez « alembic upgrade head » manuellement"
@@ -1188,6 +1189,7 @@ MESSAGES: dict[str, str] = {
     "build.step.render": "Génération des fichiers du projet",
     "build.step.deps": "Installation des dépendances",
     "build.step.env": "Configuration de l'environnement",
+    "build.step.revisions": "Dérivation des révisions depuis les modèles",
     "build.step.migrate": "Application des migrations",
     "build.step.llm": "Synchronisation du catalogue LLM",
     "build.step.format": "Formatage du code",

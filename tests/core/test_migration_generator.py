@@ -11,7 +11,6 @@ from typing import Any
 
 import pytest
 
-from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
 from aegis.core.migration_generator import (
     AI_MIGRATION,
     AUTH_MIGRATION,
@@ -31,8 +30,6 @@ from aegis.core.migration_generator import (
     TableSpec,
     _build_insights_migration,
     _render_migration,
-    generate_migration,
-    generate_migrations_for_services,
     get_existing_migrations,
     get_next_revision_id,
     get_previous_revision,
@@ -143,29 +140,6 @@ class TestGetServicesNeedingMigrations:
             "ai_backend": "memory",
         }
         assert "finance_auth_link" not in get_services_needing_migrations(context)
-
-    def test_finance_postgres_uses_finance_schema(self, tmp_path: Path) -> None:
-        """On Postgres, finance tables land in a dedicated ``finance`` schema
-        and the owner FK crosses to ``public.user``; SQLite stays unqualified."""
-        (tmp_path / "alembic" / "versions").mkdir(parents=True)
-        pg = {"database_engine": "postgres"}
-        fin = generate_migration(tmp_path, "finance", pg).read_text()
-        assert 'CREATE SCHEMA IF NOT EXISTS "finance"' in fin
-        assert "schema='finance'" in fin
-
-        (tmp_path / "alembic" / "versions2").mkdir(parents=True)
-        link = generate_migration(tmp_path, "finance_auth_link", pg).read_text()
-        assert "schema='finance'" in link
-        assert "referent_schema='public'" in link
-
-    def test_finance_sqlite_has_no_schema(self, tmp_path: Path) -> None:
-        """SQLite has no schemas, so the finance migration is unqualified."""
-        (tmp_path / "alembic" / "versions").mkdir(parents=True)
-        fin = generate_migration(
-            tmp_path, "finance", {"database_engine": "sqlite"}
-        ).read_text()
-        assert "CREATE SCHEMA" not in fin
-        assert "schema='finance'" not in fin
 
     def test_auth_rbac_needs_migration(self) -> None:
         """Test auth_rbac migration needed when rbac level enabled."""
@@ -375,48 +349,6 @@ class TestServiceHasMigration:
 class TestGenerateMigration:
     """Test individual migration generation."""
 
-    def test_unknown_service(self, tmp_path: Path) -> None:
-        """Test returns None for unknown service."""
-        result = generate_migration(tmp_path, "unknown")
-        assert result is None
-
-    def test_generates_auth_migration(self, tmp_path: Path) -> None:
-        """Test generates auth migration file."""
-        result = generate_migration(tmp_path, "auth")
-
-        assert result is not None
-        assert result.exists()
-        assert result.name == "001_auth.py"
-
-        # Verify content
-        content = result.read_text()
-        assert "revision = '001'" in content
-        assert "down_revision = None" in content
-        assert "op.create_table" in content
-        assert "'user'" in content
-        assert "'email'" in content
-        assert "'is_verified'" in content
-        assert "'last_login'" in content
-        # Only role is in auth_rbac migration, not base
-        assert "'role'" not in content
-
-    def test_auth_migration_renders_partial_unique_email_index(
-        self, tmp_path: Path
-    ) -> None:
-        """The ``ix_user_email`` partial unique index must include the
-        ``WHERE deleted_at IS NULL`` predicate. Without this, alembic
-        creates a full unique index and re-registration after a soft
-        delete fails — even though the SQLModel side declares it as
-        partial (silent two-source drift)."""
-        result = generate_migration(tmp_path, "auth")
-        assert result is not None
-        content = result.read_text()
-        assert "ix_user_email" in content
-        # Both backends carry the same predicate so the index behaves
-        # identically on SQLite (dev/test) and Postgres (prod).
-        assert 'sqlite_where=sa.text("deleted_at IS NULL")' in content
-        assert 'postgresql_where=sa.text("deleted_at IS NULL")' in content
-
     def test_alter_add_index_renders_partial_predicate(self, tmp_path: Path) -> None:
         """``IndexSpec(..., where=...)`` inside an ``AlterTableSpec``
         must render the same predicate as the create_table path.
@@ -451,126 +383,6 @@ class TestGenerateMigration:
         assert "batch_op.create_index" in content
         assert 'sqlite_where=sa.text("deleted_at IS NULL")' in content
         assert 'postgresql_where=sa.text("deleted_at IS NULL")' in content
-
-    def test_generates_auth_rbac_migration(self, tmp_path: Path) -> None:
-        """Test generates auth_rbac migration with ALTER TABLE."""
-        # Generate base auth first so rbac gets correct revision chain
-        generate_migration(tmp_path, "auth")
-        result = generate_migration(tmp_path, "auth_rbac")
-
-        assert result is not None
-        assert result.exists()
-        assert result.name == "002_auth_rbac.py"
-
-        content = result.read_text()
-        assert "revision = '002'" in content
-        assert "down_revision = '001'" in content
-        # Should use add_column, NOT create_table
-        assert "op.add_column" in content
-        assert "op.create_table" not in content
-        assert "'role'" in content
-        # is_verified and last_login are in base auth, not rbac
-        assert "'is_verified'" not in content
-        assert "'last_login'" not in content
-        # Downgrade should use drop_column
-        assert "op.drop_column" in content
-
-    def test_generates_ai_migration(self, tmp_path: Path) -> None:
-        """Test generates AI migration file."""
-        result = generate_migration(tmp_path, "ai")
-
-        assert result is not None
-        assert result.exists()
-        assert result.name == "001_ai.py"
-
-        # Verify content
-        content = result.read_text()
-        assert "'conversation'" in content
-        assert "'conversation_message'" in content
-        assert "op.create_index" in content
-
-    def test_generates_blog_migration(self, tmp_path: Path) -> None:
-        """Test generates blog migration file."""
-        result = generate_migration(tmp_path, "blog")
-
-        assert result is not None
-        assert result.exists()
-        assert result.name == "001_blog.py"
-
-        content = result.read_text()
-        assert "'blog_post'" in content
-        assert "'blog_tag'" in content
-        assert "'blog_post_tag'" in content
-        assert "ck_blog_post_status" in content
-        assert "ondelete='CASCADE'" in content
-
-    def test_generates_documents_migration(self, tmp_path: Path) -> None:
-        result = generate_migration(tmp_path, "documents")
-
-        assert result is not None
-        assert result.name == "001_documents.py"
-        content = result.read_text()
-        assert "'document'" in content
-        assert "'document_tag'" in content
-        # SF-07 lifecycle columns ship in the squashed migration too.
-        assert "'supersedes_id'" in content
-        assert "'protected'" in content
-        assert "'channel'" in content
-        # SF-05: the per-page readings table rides the same migration.
-        assert "'document_page'" in content
-        assert "uq_document_page" in content
-
-    def test_creates_versions_directory(self, tmp_path: Path) -> None:
-        """Test creates versions directory if it doesn't exist."""
-        assert not (tmp_path / "alembic" / "versions").exists()
-
-        generate_migration(tmp_path, "auth")
-
-        assert (tmp_path / "alembic" / "versions").exists()
-
-
-class TestGenerateMigrationsForServices:
-    """Test batch migration generation."""
-
-    def test_generates_in_order(self, tmp_path: Path) -> None:
-        """Test generates migrations in specified order."""
-        result = generate_migrations_for_services(tmp_path, ["auth", "ai"])
-
-        assert len(result) == 2
-        assert result[0].name == "001_auth.py"
-        assert result[1].name == "002_ai.py"
-
-        # Verify down_revision chain
-        auth_content = result[0].read_text()
-        ai_content = result[1].read_text()
-
-        assert "down_revision = None" in auth_content
-        assert "down_revision = '001'" in ai_content
-
-    def test_skips_existing_migrations(self, tmp_path: Path) -> None:
-        """Test skips services that already have migrations."""
-        # Create existing auth migration
-        versions_dir = tmp_path / "alembic" / "versions"
-        versions_dir.mkdir(parents=True)
-        (versions_dir / "001_auth.py").write_text("# existing")
-
-        result = generate_migrations_for_services(tmp_path, ["auth", "ai"])
-
-        # Should only generate AI
-        assert len(result) == 1
-        assert result[0].name == "002_ai.py"
-
-    def test_skips_unknown_services(self, tmp_path: Path) -> None:
-        """Test skips unknown services without error."""
-        result = generate_migrations_for_services(tmp_path, ["unknown", "auth"])
-
-        assert len(result) == 1
-        assert result[0].name == "001_auth.py"
-
-    def test_empty_list(self, tmp_path: Path) -> None:
-        """Test handles empty service list."""
-        result = generate_migrations_for_services(tmp_path, [])
-        assert result == []
 
 
 class TestMigrationSpecs:
@@ -785,22 +597,6 @@ class TestMigrationSpecs:
         assert rate_col.type == "sa.BigInteger()"
         assert {fk.ref_table for fk in fx.foreign_keys} == {"finance_currency"}
 
-    def test_generates_finance_migration(self, tmp_path: Path) -> None:
-        """Finance migration file renders with tables, FKs, and constraints."""
-        result = generate_migration(tmp_path, "finance")
-
-        assert result is not None
-        assert result.exists()
-        assert result.name == "001_finance.py"
-
-        content = result.read_text()
-        assert "'finance_currency'" in content
-        assert "'finance_fx_rate'" in content
-        assert "ck_finance_currency_kind" in content
-        assert "ck_finance_fxrate_distinct" in content
-        assert "sa.BigInteger()" in content
-        assert "finance_currency.code" in content
-
 
 class TestOrgMigrationSpec:
     """Test organization migration specification."""
@@ -954,47 +750,6 @@ class TestOrgInviteTable:
         ref_tables = {fk.ref_table for fk in invite_table.foreign_keys}
         assert "organization" in ref_tables
         assert "user" in ref_tables
-
-
-class TestGenerateAuthTokensMigration:
-    """Test auth_tokens migration file generation."""
-
-    def test_generates_auth_tokens_migration(self, tmp_path: Path) -> None:
-        """Generate auth_tokens migration, verify file content has both tables."""
-        result = generate_migration(tmp_path, "auth_tokens")
-
-        assert result is not None
-        assert result.exists()
-        assert result.name == "001_auth_tokens.py"
-
-        content = result.read_text()
-        assert "'password_reset_token'" in content
-        assert "'email_verification_token'" in content
-        assert "op.create_table" in content
-        assert "op.create_index" in content
-
-    def test_auth_rbac_org_full_chain(self, tmp_path: Path) -> None:
-        """Generate auth + auth_tokens + auth_rbac + auth_org, verify 4 files with correct revision chain."""
-        result = generate_migrations_for_services(
-            tmp_path, ["auth", "auth_tokens", "auth_rbac", "auth_org"]
-        )
-
-        assert len(result) == 4
-        assert result[0].name == "001_auth.py"
-        assert result[1].name == "002_auth_tokens.py"
-        assert result[2].name == "003_auth_rbac.py"
-        assert result[3].name == "004_auth_org.py"
-
-        # Verify revision chain
-        content_0 = result[0].read_text()
-        content_1 = result[1].read_text()
-        content_2 = result[2].read_text()
-        content_3 = result[3].read_text()
-
-        assert "down_revision = None" in content_0
-        assert "down_revision = '001'" in content_1
-        assert "down_revision = '002'" in content_2
-        assert "down_revision = '003'" in content_3
 
 
 class TestDataclasses:
@@ -1193,44 +948,6 @@ class TestAgentsMigration:
         assert "ai_agents" in MIGRATION_SPECS
         assert AGENTS_MIGRATION.service_name == "ai_agents"
 
-    def test_generates_agents_migration(self, tmp_path: Path) -> None:
-        """The rendered migration creates agent, tool, and agent_tool."""
-        result = generate_migration(tmp_path, "ai_agents")
-
-        assert result is not None
-        assert result.exists()
-        assert result.name == "001_ai_agents.py"
-
-        content = result.read_text()
-        assert "'agent'" in content
-        assert "'tool'" in content
-        assert "'agent_tool'" in content
-        assert "'agent_user_memory'" in content
-        assert "'memory_module'" in content
-        # Identity, join uniqueness, and one memory row per user.
-        assert "ix_agent_slug" in content
-        assert "uq_agent_tool_pair" in content
-        assert "ix_agent_user_memory_user_id" in content
-        assert "ix_memory_module_slug" in content
-        # Links die with their agent/tool so registry deletes are clean.
-        assert "CASCADE" in content
-        # Rendered migration must be valid Python.
-        ast.parse(content)
-
-    def test_agents_migration_chains_after_ai(self, tmp_path: Path) -> None:
-        """ai -> ai_agents -> ai_voice is the generated chain."""
-        result = generate_migrations_for_services(
-            tmp_path, ["ai", "ai_agents", "ai_voice"]
-        )
-
-        assert [p.name for p in result] == [
-            "001_ai.py",
-            "002_ai_agents.py",
-            "003_ai_voice.py",
-        ]
-        agents_content = result[1].read_text()
-        assert "down_revision = '001'" in agents_content
-
 
 class TestKnowledgeMigration:
     """KB metadata tables gate on ai + persistence + the rag flag."""
@@ -1261,22 +978,6 @@ class TestKnowledgeMigration:
         result = get_services_needing_migrations(context)
         assert "ai_knowledge" not in result
 
-    def test_generates_knowledge_migration(self, tmp_path: Path) -> None:
-        result = generate_migration(tmp_path, "ai_knowledge")
-
-        assert result is not None
-        assert result.exists()
-        assert result.name == "001_ai_knowledge.py"
-
-        content = result.read_text()
-        assert "'knowledge_base'" in content
-        assert "'knowledge_base_source'" in content
-        assert "ix_knowledge_base_name" in content
-        # Chunking strategy is DB-enforced to the supported set.
-        assert "ck_knowledge_base_source_chunking_strategy" in content
-        assert "CASCADE" in content
-        ast.parse(content)
-
 
 class TestSentimentMigration:
     """Sentiment rides its own spec, gated on ai + persistence."""
@@ -1291,112 +992,6 @@ class TestSentimentMigration:
         context = {"include_auth": False, "include_ai": True, "ai_backend": "memory"}
         result = get_services_needing_migrations(context)
         assert "ai_sentiment" not in result
-
-    def test_generates_sentiment_migration(self, tmp_path: Path) -> None:
-        result = generate_migration(tmp_path, "ai_sentiment")
-
-        assert result is not None
-        assert result.exists()
-        assert result.name == "001_ai_sentiment.py"
-
-        content = result.read_text()
-        assert "'sentiment_analysis'" in content
-        # One verdict per conversation; rows die with their conversation.
-        assert "ix_sentiment_analysis_conversation_id" in content
-        assert "CASCADE" in content
-        # Enum-style values are DB-enforced.
-        assert "ck_sentiment_analysis_overall_sentiment" in content
-        assert "ck_sentiment_analysis_assistant_performance" in content
-        ast.parse(content)
-
-
-class TestGenerateVoiceMigration:
-    """Test voice migration file generation."""
-
-    def test_generates_voice_migration(self, tmp_path: Path) -> None:
-        """Test generates ai_voice migration file."""
-        result = generate_migration(tmp_path, "ai_voice")
-
-        assert result is not None
-        assert result.exists()
-        assert result.name == "001_ai_voice.py"
-
-        # Verify content
-        content = result.read_text()
-        assert "'voice_usage'" in content
-        assert "'usage_type'" in content
-        assert "op.create_index" in content
-
-    def test_voice_migration_after_ai(self, tmp_path: Path) -> None:
-        """Test voice migration chains correctly after AI migration."""
-        result = generate_migrations_for_services(tmp_path, ["ai", "ai_voice"])
-
-        assert len(result) == 2
-        assert result[0].name == "001_ai.py"
-        assert result[1].name == "002_ai_voice.py"
-
-        # Verify down_revision chain
-        ai_content = result[0].read_text()
-        voice_content = result[1].read_text()
-
-        assert "down_revision = None" in ai_content
-        assert "down_revision = '001'" in voice_content
-
-    def test_full_migration_chain(self, tmp_path: Path) -> None:
-        """Test full migration chain with auth, AI, and voice."""
-        result = generate_migrations_for_services(tmp_path, ["auth", "ai", "ai_voice"])
-
-        assert len(result) == 3
-        assert result[0].name == "001_auth.py"
-        assert result[1].name == "002_ai.py"
-        assert result[2].name == "003_ai_voice.py"
-
-        # Verify chain
-        voice_content = result[2].read_text()
-        assert "down_revision = '002'" in voice_content
-
-
-class TestCheckConstraintRendering:
-    """Test that ``CheckConstraintSpec`` entries make it into the
-    rendered migration output.
-
-    The auth spec defines a CHECK constraint on the
-    ``user_oauth_identity.provider`` column to keep the column locked
-    to the supported provider list at the database level (project
-    convention is VARCHAR + CHECK rather than native Postgres enums,
-    for SQLite parity).
-    """
-
-    def test_auth_migration_includes_oauth_provider_check(self, tmp_path: Path) -> None:
-        """Generated auth migration must render the OAuth provider check."""
-        from aegis.core.migration_generator import generate_migration
-
-        migration_path = generate_migration(tmp_path, "auth")
-        assert migration_path is not None
-        content = migration_path.read_text()
-
-        # The CHECK constraint goes through the new template branch in
-        # ``migration_generator.py`` — assert the rendered output.
-        assert "sa.CheckConstraint(" in content
-        assert "ck_user_oauth_identity_provider" in content
-        assert "provider IN ('github', 'google')" in content
-
-    def test_specs_without_check_constraints_skip_block(self, tmp_path: Path) -> None:
-        """Specs without CHECK constraints render no ``sa.CheckConstraint``.
-
-        Guards against the ``{% for chk %}`` loop accidentally emitting
-        empty / malformed output for tables that don't declare any.
-        """
-        from aegis.core.migration_generator import generate_migration
-
-        # ai_voice declares no CHECK constraints — sanity-check it. (The
-        # ai spec grew one with the org-role table, so it no longer
-        # exercises the empty-loop path this guards.)
-        migration_path = generate_migration(tmp_path, "ai_voice")
-        assert migration_path is not None
-        content = migration_path.read_text()
-
-        assert "sa.CheckConstraint(" not in content
 
 
 class TestForeignKeyOnDeleteRendering:
@@ -1418,64 +1013,6 @@ class TestForeignKeyOnDeleteRendering:
         assert fk.ondelete == "CASCADE"
         # Default still None for back-compat with every other FK.
         assert ForeignKeySpec(["x"], "y", ["id"]).ondelete is None
-
-    def test_per_user_insights_renders_cascade(self, tmp_path: Path) -> None:
-        """Per-user insights migration emits ondelete='CASCADE' on the
-        three project_id FKs (metric, event, goal).
-
-        Drives ``generate_migration`` with ``insights_per_user=true``
-        context so the spec swaps to the per-user variant.
-        """
-        from aegis.core.migration_generator import generate_migration
-
-        migration_path = generate_migration(
-            tmp_path, "insights", {"insights_per_user": True}
-        )
-        assert migration_path is not None
-        content = migration_path.read_text()
-
-        # The cascade marker should appear once per project_id FK.
-        assert content.count("ondelete='CASCADE'") == 3
-        # And it should sit on FKs that point to ``project``, not
-        # accidentally on the user FKs.
-        assert (
-            "['project.id'], ondelete='CASCADE'" in content
-            or "['project.id'],ondelete='CASCADE'" in content
-        )
-
-    def test_per_user_insights_user_fk_has_no_cascade(self, tmp_path: Path) -> None:
-        """``created_by_user_id`` and ``user_id`` FKs must NOT cascade —
-        deleting a user shouldn't nuke insights data, just error.
-        """
-        from aegis.core.migration_generator import generate_migration
-
-        migration_path = generate_migration(
-            tmp_path, "insights", {"insights_per_user": True}
-        )
-        assert migration_path is not None
-        content = migration_path.read_text()
-
-        # Find every line that references user.id and verify none of
-        # them carry ondelete=. (Substring scan over the rendered text
-        # is enough — the spec only uses two user-targeting FKs.)
-        for line in content.splitlines():
-            if "['user.id']" in line:
-                assert "ondelete" not in line, (
-                    f"User FK should not cascade, got: {line!r}"
-                )
-
-    def test_shared_insights_renders_no_cascade(self, tmp_path: Path) -> None:
-        """Shared-mode insights has no project_id FKs at all, so the
-        rendered output must not mention CASCADE anywhere.
-        """
-        from aegis.core.migration_generator import generate_migration
-
-        migration_path = generate_migration(tmp_path, "insights")
-        assert migration_path is not None
-        content = migration_path.read_text()
-
-        assert "ondelete=" not in content
-        assert "CASCADE" not in content
 
 
 class TestSchemaQualifiedRendering:
@@ -1571,10 +1108,10 @@ class TestSchedulerComponentMigration:
         context = {"include_scheduler": True, "scheduler_backend": "postgres"}
         assert "scheduler" in get_services_needing_migrations(context)
 
-    def test_not_selected_for_sqlite(self) -> None:
-        """SQLite scheduler uses create_all, not a migration (no CREATE SCHEMA)."""
+    def test_selected_for_sqlite(self) -> None:
+        """Any persistent job store gets its tables from a revision."""
         context = {"include_scheduler": True, "scheduler_backend": "sqlite"}
-        assert "scheduler" not in get_services_needing_migrations(context)
+        assert "scheduler" in get_services_needing_migrations(context)
 
     def test_not_selected_for_memory(self) -> None:
         context = {"include_scheduler": True, "scheduler_backend": "memory"}
@@ -1583,142 +1120,6 @@ class TestSchedulerComponentMigration:
     def test_not_selected_when_absent(self) -> None:
         context = {"include_auth": True}
         assert "scheduler" not in get_services_needing_migrations(context)
-
-    def test_generates_valid_schema_migration(self, tmp_path: Path) -> None:
-        """The generated file creates scheduler.job_execution and compiles.
-
-        No context means "engine unknown", which renders the spec exactly as
-        declared. The engine-gated variants are covered by
-        ``TestSchemaEngineGating``.
-        """
-        migration_path = generate_migration(tmp_path, "scheduler")
-        assert migration_path is not None
-        content = migration_path.read_text()
-        ast.parse(content)
-        assert 'CREATE SCHEMA IF NOT EXISTS "scheduler"' in content
-        assert "'job_execution'" in content
-        assert "schema='scheduler'" in content
-        # composite index for "last N runs of one job"
-        assert "ix_job_execution_job_started" in content
-
-
-class TestSchemaEngineGating:
-    """Postgres schemas are stripped for engines that have no schemas.
-
-    Gating used to be a hardcoded per-service if-chain (finance only), so
-    component- and plugin-declared schemas leaked ``CREATE SCHEMA`` into
-    SQLite migrations, which SQLite rejects. Resolution is now generic:
-    any spec's ``schema`` is dropped when the target engine isn't Postgres.
-    """
-
-    def _generate(self, tmp_path: Path, service: str, engine: str) -> str:
-        (tmp_path / "alembic" / "versions").mkdir(parents=True, exist_ok=True)
-        path = generate_migration(
-            tmp_path, service, {AnswerKeys.DATABASE_ENGINE: engine}
-        )
-        assert path is not None
-        return path.read_text()
-
-    # ----- component-declared schema (scheduler) -----
-
-    def test_scheduler_sqlite_has_no_schema(self, tmp_path: Path) -> None:
-        """SQLite has no schemas; CREATE SCHEMA there is invalid SQL."""
-        content = self._generate(
-            tmp_path, ComponentNames.SCHEDULER, StorageBackends.SQLITE
-        )
-        ast.parse(content)
-        assert "CREATE SCHEMA" not in content
-        assert "schema='scheduler'" not in content
-        # The table itself must still be created, just unqualified.
-        assert "'job_execution'" in content
-
-    def test_scheduler_postgres_keeps_schema(self, tmp_path: Path) -> None:
-        content = self._generate(
-            tmp_path, ComponentNames.SCHEDULER, StorageBackends.POSTGRES
-        )
-        assert 'CREATE SCHEMA IF NOT EXISTS "scheduler"' in content
-        assert "schema='scheduler'" in content
-
-    def test_scheduler_memory_backend_has_no_schema(self, tmp_path: Path) -> None:
-        """Any non-Postgres engine, not just SQLite, drops the schema."""
-        content = self._generate(
-            tmp_path, ComponentNames.SCHEDULER, StorageBackends.MEMORY
-        )
-        assert "CREATE SCHEMA" not in content
-
-    # ----- plugin-declared schema (third-party) -----
-
-    def _register_plugin_spec(
-        self, monkeypatch: pytest.MonkeyPatch, schema: str
-    ) -> str:
-        """Register a throwaway plugin migration spec in the registry."""
-        import aegis.core.migration_generator as mg
-
-        spec = ServiceMigrationSpec(
-            service_name="crawler",
-            description="Crawler documents store",
-            schema=schema,
-            tables=[
-                TableSpec(
-                    name="documents",
-                    columns=[
-                        ColumnSpec(
-                            "id", "sa.Integer()", nullable=False, primary_key=True
-                        ),
-                        ColumnSpec("source_url", "sa.Text()", nullable=False),
-                    ],
-                ),
-            ],
-        )
-        monkeypatch.setattr(
-            mg, "_MIGRATION_SPECS_CACHE", {**mg._get_migration_specs(), "crawler": spec}
-        )
-        return "crawler"
-
-    def test_plugin_schema_stripped_on_sqlite(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A third-party plugin gets the same gating in-tree services get."""
-        service = self._register_plugin_spec(monkeypatch, "crawler")
-        content = self._generate(tmp_path, service, StorageBackends.SQLITE)
-        ast.parse(content)
-        assert "CREATE SCHEMA" not in content
-        assert "schema='crawler'" not in content
-        assert "'documents'" in content
-
-    def test_plugin_schema_kept_on_postgres(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        service = self._register_plugin_spec(monkeypatch, "crawler")
-        content = self._generate(tmp_path, service, StorageBackends.POSTGRES)
-        assert 'CREATE SCHEMA IF NOT EXISTS "crawler"' in content
-        assert "schema='crawler'" in content
-
-    def test_schemaless_plugin_unaffected_on_postgres(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Gating only removes schemas; it never invents one."""
-        import aegis.core.migration_generator as mg
-
-        spec = ServiceMigrationSpec(
-            service_name="plain",
-            description="No schema",
-            tables=[
-                TableSpec(
-                    name="thing",
-                    columns=[
-                        ColumnSpec(
-                            "id", "sa.Integer()", nullable=False, primary_key=True
-                        )
-                    ],
-                )
-            ],
-        )
-        monkeypatch.setattr(
-            mg, "_MIGRATION_SPECS_CACHE", {**mg._get_migration_specs(), "plain": spec}
-        )
-        content = self._generate(tmp_path, "plain", StorageBackends.POSTGRES)
-        assert "CREATE SCHEMA" not in content
 
 
 class TestPluginMigrations:
@@ -1747,54 +1148,6 @@ class TestPluginMigrations:
             ],
         )
         return SimpleNamespace(name="crawl4ai", migrations=[migration])
-
-    def test_writes_one_file_per_migration_spec(self, tmp_path: Path) -> None:
-        from aegis.core.migration_generator import generate_plugin_migrations
-
-        (tmp_path / "alembic" / "versions").mkdir(parents=True)
-        written = generate_plugin_migrations(
-            tmp_path,
-            self._plugin_spec(),
-            {AnswerKeys.DATABASE_ENGINE: StorageBackends.SQLITE},
-        )
-        assert [p.name.split("_", 1)[1] for p in written] == ["crawler.py"]
-        content = written[0].read_text()
-        ast.parse(content)
-        assert "'documents'" in content
-
-    def test_schema_gated_by_engine(self, tmp_path: Path) -> None:
-        from aegis.core.migration_generator import generate_plugin_migrations
-
-        (tmp_path / "alembic" / "versions").mkdir(parents=True)
-        sqlite = generate_plugin_migrations(
-            tmp_path / "a" if False else tmp_path,
-            self._plugin_spec(),
-            {AnswerKeys.DATABASE_ENGINE: StorageBackends.SQLITE},
-        )[0].read_text()
-        assert "schema='crawler'" not in sqlite
-
-        pg_root = tmp_path / "pg"
-        (pg_root / "alembic" / "versions").mkdir(parents=True)
-        postgres = generate_plugin_migrations(
-            pg_root,
-            self._plugin_spec(),
-            {AnswerKeys.DATABASE_ENGINE: StorageBackends.POSTGRES},
-        )[0].read_text()
-        assert 'CREATE SCHEMA IF NOT EXISTS "crawler"' in postgres
-        assert "schema='crawler'" in postgres
-
-    def test_idempotent_on_rerun(self, tmp_path: Path) -> None:
-        """A second ``aegis add`` of the same plugin must not stack a
-        duplicate migration."""
-        from aegis.core.migration_generator import generate_plugin_migrations
-
-        (tmp_path / "alembic" / "versions").mkdir(parents=True)
-        context = {AnswerKeys.DATABASE_ENGINE: StorageBackends.SQLITE}
-        first = generate_plugin_migrations(tmp_path, self._plugin_spec(), context)
-        second = generate_plugin_migrations(tmp_path, self._plugin_spec(), context)
-        assert len(first) == 1
-        assert second == []
-        assert len(list((tmp_path / "alembic" / "versions").glob("*.py"))) == 1
 
 
 class TestMigrationsAreIdempotentOnPrepopulatedSQLite:
@@ -1876,7 +1229,6 @@ class TestMigrationsAreIdempotentOnPrepopulatedSQLite:
         """The table guard must NOT extend to ``add_column``: a column that
         already exists is a real schema conflict (#1023-shaped), not
         ``create_all`` pre-creation, and hiding it would hide the bug."""
-        import pytest
         import sqlalchemy as sa
 
         url = f"sqlite:///{tmp_path / 'app.db'}"

@@ -355,6 +355,7 @@ MESSAGES: dict[str, str] = {
         "'alembic upgrade head'를 수동으로 실행하세요."
     ),
     "postgen.db_failed": "경고: 데이터베이스 마이그레이션 설정 실패",
+    "postgen.revisions_failed": "모델에서 리비전을 생성하지 못했습니다",
     "postgen.db_manual": "프로젝트 생성 후 'alembic upgrade head'를 수동으로 실행하세요",
     "postgen.db_timeout": (
         "경고: 마이그레이션 설정 시간 초과 - 'alembic upgrade head'를 수동으로 실행하세요"
@@ -1133,6 +1134,7 @@ MESSAGES: dict[str, str] = {
     "build.step.render": "프로젝트 파일 생성 중",
     "build.step.deps": "의존성 설치 중",
     "build.step.env": "환경 설정",
+    "build.step.revisions": "모델에서 리비전 생성 중",
     "build.step.migrate": "마이그레이션 적용 중",
     "build.step.llm": "LLM 카탈로그 동기화 중",
     "build.step.format": "코드 포매팅 중",

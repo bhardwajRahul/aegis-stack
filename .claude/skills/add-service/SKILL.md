@@ -45,11 +45,12 @@ Registry (`ServiceSpec` is a thin alias of `PluginSpec` pinned to
     `compute_file_mapping()` derives `post_gen_tasks.get_component_file_mapping()`
     from this, so there is no separate hand-maintained mapping to edit.
 - `aegis/core/migration_generator.py`: only if the service owns tables, add a
-  `ServiceMigrationSpec` (built from `TableSpec`/`ColumnSpec`/`IndexSpec`/
-  `ForeignKeySpec`/`CheckConstraintSpec`) as a module-level constant (see
-  `BLOG_MIGRATION`, `FINANCE_MIGRATION`) and reference it from the spec's
-  `migrations=[...]` list in `services.py`. Import the plugin-facing aliases
-  from `aegis/core/migration_spec.py` if writing from outside this module.
+  `ServiceMigrationSpec` naming the revision (`service_name`, `description`,
+  `schema`, `stamp_signature`) and reference it from the spec's
+  `migrations=[...]` list in `services.py`. Its `tables` list renders
+  nothing any more: revision files are derived from the SQLModel classes by
+  the generated project's `app/cli/migrate_gen.py` (run by init/add inside
+  the project venv), so the models are the only place a column is declared.
   `MIGRATION_SPECS` is derived lazily from every spec's `.migrations` via
   `collect_migrations()` - no dict entry to hand-maintain.
 - `aegis/constants.py`: `AnswerKeys` - add `<NAME> = "include_<name>"` and
@@ -232,8 +233,8 @@ Cross-cutting:
    if the service exposes routes. Confirm they fail for the right reason.
 2. Add `AnswerKeys.<NAME>` / `AnswerKeys.SERVICE_<NAME>` in
    `aegis/constants.py`.
-3. If the service owns tables, add its `ServiceMigrationSpec` to
-   `aegis/core/migration_generator.py`.
+3. If the service owns tables, add its `ServiceMigrationSpec` (name, schema,
+   stamp signature; no table bodies) to `aegis/core/migration_generator.py`.
 4. Add the `ServiceSpec` entry in `aegis/core/services.py`: identity fields,
    `required_components`, `pyproject_deps`, `wiring=PluginWiring(...)`,
    `migrations=[...]`, and `files=FileManifest(primary=[...])`.
@@ -304,11 +305,10 @@ Cross-cutting:
   the manifest claims is invisible to the engine by design, so a
   `{% if include_<name> %}` block inside it will never be re-rendered on
   add/remove of a *different* component.
-- SQLModel model definitions (in the service's `models.py`) and the
-  `ServiceMigrationSpec`'s `TableSpec` entries in `migration_generator.py`
-  are two independent sources of truth for the same table; changing one
-  without the other drifts the schema from the ORM model silently, since
-  nothing type-checks them against each other.
+- The SQLModel classes are the single source of the schema. The generated
+  project's `tests/test_model_registry.py` replays the revisions onto a
+  scratch database and asserts they rebuild the models exactly, and
+  `tests/cli/test_migrations_match_models.py` does the same on Postgres.
 - `ServiceSpec.wiring` (routers, dashboard cards/modals, deps providers) is
   metadata that currently only *mirrors* what's hand-wired into the shared
   Jinja template files - it does not yet drive their rendering for in-tree
@@ -319,11 +319,11 @@ Cross-cutting:
   to a real file under this repo's root `/docs` - setting it before the docs
   page exists (or pointing it at the template's `docs/services/<name>/`
   instead of the root one) fails that test.
-- A table-owning service needs its models registered in
-  `database_init.py.jinja` (and `alembic/env.py.jinja`) on top of the
-  `ServiceMigrationSpec`; if you add the migration spec but skip these, the
-  service generates cleanly yet its tables are never created, and the failure
-  only surfaces at runtime, not at generation.
+- A table-owning service keeps its models under
+  `app/services/<name>/models` (module or package). `app/core/model_registry.py`
+  imports that path for alembic, the tests, startup and `migrate-fix`; a
+  table defined anywhere else is invisible to all four, and
+  `tests/core/test_model_registry_is_the_only_registrar.py` fails on it.
 - Threading `AnswerKeys.<NAME>` into `services.py` and `copier.yml` is not
   enough: the generate/update plumbing (`template_generator.py`,
   `copier_manager.py`, `copier_updater.py`, `manual_updater.py`,
