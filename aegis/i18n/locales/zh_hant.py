@@ -296,6 +296,7 @@ MESSAGES: dict[str, str] = {
         "跳過數據庫遷移，請確認設定檔案存在後手動執行 alembic upgrade head"
     ),
     "postgen.db_failed": "提示：數據庫遷移未成功",
+    "postgen.revisions_failed": "無法根據模型產生遷移版本",
     "postgen.db_manual": "可手動執行 alembic upgrade head",
     "postgen.db_timeout": "提示：數據庫遷移超時，請手動執行 alembic upgrade head",
     "postgen.db_error": "提示：數據庫遷移失敗 — {error}",
@@ -1020,6 +1021,7 @@ MESSAGES: dict[str, str] = {
     "build.step.render": "正在產生專案檔案",
     "build.step.deps": "正在安裝相依套件",
     "build.step.env": "環境設定",
+    "build.step.revisions": "正在根據模型產生遷移版本",
     "build.step.migrate": "正在套用遷移",
     "build.step.llm": "正在同步 LLM 目錄",
     "build.step.format": "正在格式化程式碼",

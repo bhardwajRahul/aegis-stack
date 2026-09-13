@@ -17,12 +17,14 @@ from app.services.finance.models.base import (
     _OWNER_FK,
 )
 from sqlalchemy import (
-    JSON,
     CheckConstraint,
     Column,
     Date,
     DateTime,
+    ForeignKey,
     Index,
+    Integer,
+    JSON,
 )
 from sqlmodel import Field, SQLModel
 
@@ -30,14 +32,9 @@ from sqlmodel import Field, SQLModel
 # Group C (core) — transactions, splits, transfers
 # ---------------------------------------------------------------------------
 #
-# Forward/circular FK columns (``category_id``, ``merchant_id``,
-# ``recurring_stream_id``, ``import_batch_id``, ``transfer_group_id``) are plain
-# integer columns here — NO model-level ``foreign_key=``. Their target tables
-# are defined in later tickets (categories/merchants FIN-08, recurring/import
-# FIN-10) or would form a create_all cycle (transfer_group_id <-> finance_
-# transfer). The FK constraints live in the generated migration's alter_tables
-# (transfer_group_id in FINANCE_MIGRATION, the rest in later tickets), so the
-# generated project enforces them; ``create_all`` in tests stays acyclic.
+# Every FK is declared on the model; the revisions are derived from here.
+# ``transfer_group_id`` closes the transaction <-> transfer cycle with
+# ``use_alter`` so both ``create_all`` and the revision order stay acyclic.
 
 
 class FinanceTransaction(SQLModel, table=True):
@@ -192,9 +189,19 @@ class FinanceTransaction(SQLModel, table=True):
     )
     status: str = Field(default="posted", max_length=12)
     is_transfer: bool = Field(default=False)
-    # Circular FK (finance_transfer) — plain column; constraint via alter_tables.
+    # finance_transfer points back at its legs, so this FK closes a cycle;
+    # ``use_alter`` adds it after both tables exist.
     transfer_group_id: int | None = Field(
-        default=None, foreign_key=f"{_FK}finance_transfer.id"
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey(
+                f"{_FK}finance_transfer.id",
+                use_alter=True,
+                name="fk_finance_transaction_transfer_group",
+            ),
+            nullable=True,
+        ),
     )
     transfer_pair_transaction_id: int | None = Field(
         default=None, foreign_key=f"{_FK}finance_transaction.id"

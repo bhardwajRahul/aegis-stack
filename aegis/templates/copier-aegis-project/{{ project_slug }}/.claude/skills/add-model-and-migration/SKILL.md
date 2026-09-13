@@ -34,10 +34,15 @@ for non-database state.
 2. Define or edit the SQLModel class in the service's `models.py`.
 3. Keep the class under the service's `models` module or package; the model
    registry imports it, so autogenerate sees it with no further wiring.
-4. Generate the migration with alembic autogenerate, then open the new file in
-   `alembic/versions/` and confirm it contains the intended change and nothing
-   spurious.
-5. Run the gates and fix anything red.
+4. Derive the migration from the model with
+   `uv run python -m app.cli.migrate_gen <service>` (what `aegis add` runs), or
+   with alembic autogenerate directly. Open the new file in `alembic/versions/`
+   and confirm it contains the intended change and nothing spurious.
+5. Confirm nothing drifted: `uv run python -m app.cli.migrate_gen --check`
+   replays every revision onto a scratch database and prints what still
+   differs from the models. Empty output is the goal, and
+   `tests/test_model_registry.py` asserts it.
+6. Run the gates and fix anything red.
 
 ## Gates
 

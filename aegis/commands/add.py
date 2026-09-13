@@ -654,6 +654,14 @@ def add_command(
                 component_data[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = update_data.get(
                     AnswerKeys.SCHEDULER_WITH_PERSISTENCE, False
                 )
+                # The scheduler's own models gate their Postgres schema on the
+                # engine, and the database component is added after this one,
+                # so without this they render unqualified on a project that
+                # ends up Postgres.
+                if AnswerKeys.DATABASE_ENGINE in update_data:
+                    component_data[AnswerKeys.DATABASE_ENGINE] = update_data[
+                        AnswerKeys.DATABASE_ENGINE
+                    ]
             elif (
                 component == ComponentNames.DATABASE
                 and AnswerKeys.DATABASE_ENGINE in update_data

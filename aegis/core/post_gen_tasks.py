@@ -32,6 +32,11 @@ from aegis.core.template_cleanup import run_resilient
 from aegis.i18n import t
 
 from ..cli import brand
+from .migration_generator import (
+    MigrationGenerationError,
+    generate_revisions,
+    get_services_needing_migrations,
+)
 
 # Task configuration constants (following tests/cli/test_utils.py pattern)
 POST_GEN_TIMEOUT_INSTALL = 300  # 5 minutes for dependency installation
@@ -518,36 +523,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             project_path, "app/components/frontend/dashboard/cards/services_card.py"
         )
 
-    # Remove Alembic directory only if NOTHING needs migrations.
-    # Alembic is needed when: auth, insights, payment, blog, AI with a
-    # non-memory backend, or a Postgres-backed scheduler (its execution
-    # history table ships as a schema-qualified migration).
-    include_auth = is_enabled(AnswerKeys.AUTH)
-    include_ai = is_enabled(AnswerKeys.AI)
-    include_insights = is_enabled(AnswerKeys.INSIGHTS)
-    include_payment = is_enabled(AnswerKeys.PAYMENT)
-    include_blog = is_enabled(AnswerKeys.BLOG)
-    include_documents = is_enabled(AnswerKeys.DOCUMENTS)
-    include_finance = is_enabled(AnswerKeys.FINANCE)
-    ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
-    ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
-    scheduler_backend = context.get(
-        AnswerKeys.SCHEDULER_BACKEND, StorageBackends.MEMORY
-    )
-    scheduler_needs_migrations = (
-        is_enabled(AnswerKeys.SCHEDULER)
-        and scheduler_backend == StorageBackends.POSTGRES
-    )
-    needs_migrations = (
-        include_auth
-        or ai_needs_migrations
-        or include_insights
-        or include_payment
-        or include_blog
-        or include_documents
-        or include_finance
-        or scheduler_needs_migrations
-    )
+    # Remove Alembic directory only if NOTHING needs migrations. The same
+    # function that picks which services get a revision answers this, so a
+    # new table-owning service cannot ship with its alembic tree deleted.
+    needs_migrations = bool(get_services_needing_migrations(context))
 
     if not needs_migrations:
         remove_dir(project_path, "alembic")
@@ -835,9 +814,12 @@ def run_migrations(
             return False
 
         # Run alembic migrations using uv run (ensures correct environment)
-        # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
+        # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv,
+        # and UV_PYTHON because it pins the interpreter for the aegis tool,
+        # not for a generated project with its own requires-python.
         env = os.environ.copy()
         env.pop("VIRTUAL_ENV", None)
+        env.pop("UV_PYTHON", None)
 
         # Build command with optional --python flag. `--project` pins uv to
         # the generated project regardless of the caller's cwd or parent
@@ -1081,6 +1063,7 @@ def run_post_generation_tasks(
     project_slug: str | None = None,
     reporter: "BuildReporter | None" = None,
     report: dict[str, bool] | None = None,
+    migration_services: list[str] | None = None,
 ) -> bool:
     """
     Run all post-generation tasks for a project.
@@ -1095,6 +1078,8 @@ def run_post_generation_tasks(
         seed_ai: Whether AI service with persistence backend is enabled
         skip_llm_sync: Whether to skip LLM catalog sync (--skip-llm-sync flag)
         project_slug: Project slug name (used for CLI commands, derived from path if not provided)
+        migration_services: Services whose revisions are derived from the
+            models once the venv exists (before ``alembic upgrade head``)
 
     Returns:
         True if all critical tasks succeeded
@@ -1135,6 +1120,29 @@ def run_post_generation_tasks(
     setup_env_file(project_path)
     if reporter is not None:
         reporter.done("env")
+
+    # Task 2b: Derive revision files from the models (needs the venv from
+    # task 1; must precede task 3, which applies them). A failure here is
+    # reported, and the upgrade is skipped rather than stamping a database
+    # past revisions that never landed.
+    revisions_ok = True
+    if migration_services:
+        if reporter is not None:
+            reporter.step("revisions", t("build.step.revisions"), "migrate_gen")
+        try:
+            generate_revisions(
+                project_path, migration_services, python_version=python_version
+            )
+        except MigrationGenerationError as exc:
+            revisions_ok = False
+            brand.warn(t("postgen.revisions_failed"))
+            for line in _truncate_stderr(str(exc)).split("\n"):
+                typer.echo(f"   {line}")
+        if report is not None:
+            report["revisions_ok"] = revisions_ok
+        if reporter is not None:
+            reporter.done("revisions")
+    include_migrations = include_migrations and revisions_ok
 
     # Task 3: Run migrations if needed (non-critical)
     if reporter is not None and include_migrations:

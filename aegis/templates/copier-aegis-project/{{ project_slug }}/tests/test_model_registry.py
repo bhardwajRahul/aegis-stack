@@ -35,3 +35,19 @@ def test_registry_imports_every_table_module() -> None:
     import_all_models()
     missing = sorted(m for m in _table_modules() if m not in sys.modules)
     assert not missing, "tables the registry never imported:\n  " + "\n  ".join(missing)
+
+
+@pytest.mark.skipif(
+    not (APP.parent / "alembic" / "alembic.ini").exists(),
+    reason="this stack ships no migrations",
+)
+def test_generated_revisions_rebuild_the_models(tmp_path: Path) -> None:
+    """Applying every revision to an empty database yields the models, exactly.
+
+    This is the property the revision generator exists to hold: the files
+    under ``alembic/versions`` are derived from the models, so replaying
+    them must reproduce ``SQLModel.metadata`` with no drift either way.
+    """
+    from app.cli.migrate_gen import drift
+
+    assert drift(scratch_dir=tmp_path) == []

@@ -257,6 +257,7 @@ class TestAddServiceVariantUpgrade:
         with (
             patch("aegis.core.migration_generator.bootstrap_alembic"),
             patch("aegis.core.migration_generator.generate_migration"),
+            patch("aegis.core.migration_generator.generate_revisions", return_value=[]),
             patch(
                 "aegis.core.migration_generator.service_has_migration",
                 return_value=True,
@@ -316,8 +317,8 @@ class TestAddServiceVariantUpgrade:
                 side_effect=lambda _p, name, _a=None: generated.append(name),
             ),
             patch(
-                "aegis.core.migration_generator.service_has_migration",
-                return_value=False,
+                "aegis.core.migration_generator.generate_revisions",
+                side_effect=lambda _p, names, **_k: generated.extend(names) or [],
             ),
             patch("aegis.core.post_gen_tasks.run_migrations"),
             patch.object(
@@ -351,6 +352,7 @@ class TestAuthLevelDerivedFlags:
         with (
             patch("aegis.core.migration_generator.bootstrap_alembic"),
             patch("aegis.core.migration_generator.generate_migration"),
+            patch("aegis.core.migration_generator.generate_revisions", return_value=[]),
             patch(
                 "aegis.core.migration_generator.service_has_migration",
                 return_value=True,

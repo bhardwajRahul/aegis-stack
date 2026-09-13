@@ -36,7 +36,6 @@ from ..constants import (
 from .build_reporter import BuildReporter
 from .components import COMPONENTS, ComponentType
 from .migration_generator import (
-    generate_migrations_for_services,
     get_services_needing_migrations,
 )
 from .post_gen_tasks import cleanup_components, run_post_generation_tasks
@@ -378,12 +377,6 @@ def generate_with_copier(
     needs_migration_files = bool(services)
     run_migrations = needs_migration_files and is_sqlite
 
-    # Generate migrations for services that need them (always, regardless of engine)
-    if services:
-        generated = generate_migrations_for_services(project_path, services, context)
-        for migration_path in generated:
-            print(f"Generated migration: {migration_path.name}")
-
     # AI needs seeding when using persistence backend AND sqlite (postgres needs running server)
     ai_needs_seeding = ai_needs_migrations and is_sqlite
 
@@ -407,6 +400,7 @@ def generate_with_copier(
         skip_llm_sync=should_skip_llm_sync,
         project_slug=template_context["project_slug"],
         reporter=reporter,
+        migration_services=services,
     )
 
     # Initialize git repository for Copier updates

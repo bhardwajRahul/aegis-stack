@@ -57,9 +57,14 @@ def test_postgres_scheduler_ships_runnable_migrations(
     assert ('schema="scheduler"' in content) or ("schema='scheduler'" in content)
 
 
-def test_sqlite_scheduler_has_no_alembic(temp_output_dir: Path) -> None:
-    """A SQLite scheduler uses create_all, so it must NOT carry alembic or a
-    scheduler migration (the schema'd migration can't run on SQLite)."""
+def test_sqlite_scheduler_ships_an_unqualified_migration(
+    temp_output_dir: Path,
+) -> None:
+    """A SQLite scheduler versions its tables like everything else.
+
+    Revisions come from the models, and the models drop the ``scheduler``
+    schema on SQLite, so there is nothing left that only Postgres can run.
+    """
     result = run_aegis_command(
         "init",
         "schedlite",
@@ -73,5 +78,12 @@ def test_sqlite_scheduler_has_no_alembic(temp_output_dir: Path) -> None:
     assert result.returncode == 0, f"init failed: {result.stderr}"
 
     project = temp_output_dir / "schedlite"
-    assert "alembic==" not in (project / "pyproject.toml").read_text()
-    assert not (project / "alembic").exists()
+    assert "alembic==" in (project / "pyproject.toml").read_text()
+    migrations = list((project / "alembic" / "versions").glob("*_scheduler.py"))
+    assert len(migrations) == 1, "expected exactly one scheduler migration"
+    content = migrations[0].read_text()
+    assert "job_execution" in content
+    assert "CREATE SCHEMA" not in content
+    assert "scheduler" not in content.split("def upgrade")[1].replace(
+        "apscheduler_jobs", ""
+    ).replace("ix_apscheduler", ""), "SQLite has no schemas to qualify with"

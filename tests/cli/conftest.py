@@ -102,7 +102,12 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     "scheduler_and_database": ProjectTemplateSpec(components=("database", "scheduler")),
     "base_with_auth_service": ProjectTemplateSpec(services=("auth",)),
     "base_with_ai_service": ProjectTemplateSpec(services=("ai",)),
-    "base_with_ai_sqlite_service": ProjectTemplateSpec(services=("ai[sqlite]",)),
+    # database is explicit: a bracket variant does not pull its component
+    # through the resolver yet (#671), so ``ai[sqlite]`` alone renders a
+    # project with no db module and no sqlmodel.
+    "base_with_ai_sqlite_service": ProjectTemplateSpec(
+        components=("database",), services=("ai[sqlite]",)
+    ),
     # AI with the option-gated rag + voice extras enabled — used to verify
     # `aegis remove ai` deletes the full footprint, not just the add base.
     "ai_with_rag_voice": ProjectTemplateSpec(
@@ -274,15 +279,18 @@ def project_factory(
 
         source = project_template_cache(spec)
         destination = temp_output_dir / source.name
+        # symlinks=True keeps ``.venv/bin/python`` a link to the real
+        # interpreter; copied as a file it loses its ``@executable_path``
+        # libpython on macOS and every ``uv run`` in the copy aborts.
         try:
-            shutil.copytree(source, destination)
+            shutil.copytree(source, destination, symlinks=True)
         except shutil.Error:
             # Residual safety net for source churn mid-copy (a lingering
             # git gc in the cached repo): the churn settles in seconds,
             # so one clean retry is enough.
             shutil.rmtree(destination, ignore_errors=True)
             time.sleep(2)
-            shutil.copytree(source, destination)
+            shutil.copytree(source, destination, symlinks=True)
         return destination
 
     return _factory
