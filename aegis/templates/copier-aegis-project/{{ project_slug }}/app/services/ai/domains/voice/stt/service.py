@@ -15,7 +15,7 @@ from app.core.db import get_async_session
 from ..models import AudioInput, STTProvider, TranscriptionResult
 from .config import STTConfig, get_stt_config
 from .providers import BaseSTTProvider, get_stt_provider
-from .usage import STTUsage
+from app.services.ai.models.voice_usage import STTUsage
 
 logger = logging.getLogger(__name__)
 

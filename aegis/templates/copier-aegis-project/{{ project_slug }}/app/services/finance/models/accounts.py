@@ -14,6 +14,7 @@ from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
     _bigint,
+    _OWNER_FK,
 )
 from sqlalchemy import (
     JSON,
@@ -78,7 +79,7 @@ class FinanceAccount(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None, index=True)
+    owner_user_id: int | None = Field(default=None, foreign_key=_OWNER_FK, index=True)
     # WHOSE money this is, when it is not the household's own. Null
     # means ours, so an existing ledger is unchanged.
     subject_id: int | None = Field(
@@ -116,7 +117,7 @@ class FinanceAccount(SQLModel, table=True):
     last_synced_at: datetime | None = Field(default=None)
     deleted_at: datetime | None = Field(default=None, index=True)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -135,7 +136,7 @@ class FinanceLiabilityDetail(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(default=None, foreign_key=_OWNER_FK)
     account_id: int = Field(foreign_key=f"{_FK}finance_account.id")
     liability_type: str | None = Field(default=None)
     last_statement_balance: int | None = _bigint("last_statement_balance")
@@ -160,11 +161,11 @@ class FinanceLiabilityDetail(SQLModel, table=True):
         default=None, foreign_key=f"{_FK}finance_account.id"
     )
     lien_position: int | None = Field(default=None)
-    aprs: list[Any] = Field(default_factory=list, sa_column=Column("aprs", JSON))
+    aprs: list[Any] = Field(default_factory=list, sa_column=Column("aprs", JSON, nullable=False))
     currency: str = Field(
         default="usd", foreign_key=f"{_FK}finance_currency.code", max_length=16
     )
-    raw: dict[str, Any] = Field(default_factory=dict, sa_column=Column("raw", JSON))
+    raw: dict[str, Any] = Field(default_factory=dict, sa_column=Column("raw", JSON, nullable=False))
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 
@@ -187,7 +188,7 @@ class FinanceBalanceSnapshot(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     account_id: int = Field(foreign_key=f"{_FK}finance_account.id")
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(default=None, foreign_key=_OWNER_FK)
     organization_id: int | None = Field(default=None)
     balance_date: date
     balance: int = _bigint("balance", nullable=False, default=0)
@@ -220,7 +221,7 @@ class FinanceNetWorthSnapshot(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(default=None, foreign_key=_OWNER_FK)
     organization_id: int | None = Field(default=None)
     as_of_date: date
     total_assets_amount: int = _bigint("total_assets_amount", nullable=False, default=0)
@@ -235,7 +236,7 @@ class FinanceNetWorthSnapshot(SQLModel, table=True):
         default="usd", foreign_key=f"{_FK}finance_currency.code", max_length=16
     )
     breakdown: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("breakdown", JSON)
+        default_factory=dict, sa_column=Column("breakdown", JSON, nullable=False)
     )
     is_estimated: bool = Field(default=False)
 
@@ -262,7 +263,7 @@ class FinanceValuation(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(default=None, foreign_key=_OWNER_FK)
     organization_id: int | None = Field(default=None)
     account_id: int = Field(foreign_key=f"{_FK}finance_account.id")
     as_of_date: date
@@ -278,7 +279,7 @@ class FinanceValuation(SQLModel, table=True):
     stale_after_days: int | None = Field(default=None)
     note: str | None = Field(default=None)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

@@ -14,6 +14,7 @@ from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
     _bigint,
+    _OWNER_FK,
 )
 from sqlalchemy import (
     JSON,
@@ -103,7 +104,7 @@ class FinanceSecurity(SQLModel, table=True):
     price_scale: int = Field(default=2)
     close_price_as_of: date | None = Field(default=None)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -165,7 +166,7 @@ class FinanceHolding(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     organization_id: int | None = Field(default=None)
     account_id: int = Field(foreign_key=f"{_FK}finance_account.id")
     security_id: int = Field(foreign_key=f"{_FK}finance_security.id")
@@ -183,7 +184,7 @@ class FinanceHolding(SQLModel, table=True):
     source: str | None = Field(default=None)
     deleted_at: datetime | None = Field(default=None)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -252,7 +253,7 @@ class FinanceTrade(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     organization_id: int | None = Field(default=None)
     account_id: int = Field(foreign_key=f"{_FK}finance_account.id")
     security_id: int | None = Field(
@@ -265,7 +266,9 @@ class FinanceTrade(SQLModel, table=True):
         default=None, foreign_key=f"{_FK}finance_connection.id"
     )
     # Forward FK (finance_import_batch, FIN-10) — plain column here.
-    import_batch_id: int | None = Field(default=None)
+    import_batch_id: int | None = Field(
+        default=None, foreign_key=f"{_FK}finance_import_batch.id"
+    )
     source: str = Field(max_length=16)
     external_id: str | None = Field(default=None)
     external_id_source: str | None = Field(default=None)
@@ -294,7 +297,7 @@ class FinanceTrade(SQLModel, table=True):
     is_removed: bool = Field(default=False)
     deleted_at: datetime | None = Field(default=None)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

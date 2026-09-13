@@ -38,91 +38,51 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 {% endif %}
-{%- if include_auth %}
-# Import models to register them with SQLModel metadata
-from app.models.user import User  # noqa: F401
-{% endif %}
 {%- if include_payment %}
 # Import payment models to register them with SQLModel metadata
-from app.services.payment.models import (  # noqa: F401
-    PaymentCustomer,
-    PaymentProvider,
-    PaymentSubscription,
-    PaymentTransaction,
-)
 {% endif %}
 {%- if include_blog %}
 # Import blog models to register them with SQLModel metadata
-from app.services.blog.models import BlogPost, BlogPostTag, BlogTag  # noqa: F401
 {% endif %}
 {%- if include_ai and ai_backend != "memory" %}
 # Import AI models to register them with SQLModel metadata. The agents and
 # llm subpackages each import every model module they own, so these two
 # names pull in the whole set.
-from app.services.ai.models.agents import (  # noqa: F401
-    Agent,
-    AgentTool,
-    AgentUserMemory,
-    MemoryModule,
-    Tool,
-)
-from app.services.ai.models.llm import (  # noqa: F401
-    LargeLanguageModel,
-    LLMActiveSelection,
-    LLMDeployment,
-    LLMModality,
-    LLMPrice,
-    LLMUsage,
-    LLMOrg,
-)
 {% endif %}
 {%- if include_finance %}
 # Import finance models to register them with SQLModel metadata
-from app.services.finance.models import (  # noqa: F401
-    FinanceAccount,
-    FinanceAttachment,
-    FinanceBalanceSnapshot,
-    FinanceBudget,
-    FinanceBudgetCategory,
-    FinanceCategory,
-    FinanceCategoryAlias,
-    FinanceConnection,
-    FinanceCurrency,
-    FinanceFxRate,
-    FinanceHolding,
-    FinanceImportBatch,
-    FinanceImportBatchRow,
-    FinanceImportProfile,
-    FinanceInsight,
-    FinanceInstitution,
-    FinanceLiabilityDetail,
-    FinanceMerchant,
-    FinanceNetWorthSnapshot,
-    FinanceRecurringStream,
-    FinanceRule,
-    FinanceSecurity,
-    FinanceSecurityPrice,
-    FinanceSpendingBaseline,
-    FinanceTag,
-    FinanceTrade,
-    FinanceTransaction,
-    FinanceTransactionChangelog,
-    FinanceTransactionSplit,
-    FinanceTransactionTag,
-    FinanceTransfer,
-    FinanceValuation,
-    FinanceWebhookEvent,
-)
 {% endif %}
 {%- if include_scheduler and scheduler_backend != "memory" %}
 # Import scheduler models to register them with SQLModel metadata
-from app.services.scheduler.models import JobExecution  # noqa: F401
 {% endif %}
 
 # Add project root to Python path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.integrations.main import create_integrated_app
+from app.core.model_registry import import_all_models  # noqa: E402
+
+import_all_models()
+
+{%- if include_auth %}
+# Tests refer to owners by number: ``owner_user_id=1`` on a finance row,
+# ``user_id=42`` on a payment customer, ``0`` for the standalone-install
+# sentinel the services write when no owner is given. With auth in the stack
+# those columns are real foreign keys to ``user`` - in a generated database
+# they always were - so the rows must exist in every database a test writes
+# through. Seeded once per engine, committed, so every session and every
+# test transaction on that engine sees them.
+KNOWN_OWNER_IDS = (0, 1, 2, 7, 8, 42, 99, 999)
+
+
+def _known_owner_rows() -> list[Any]:
+    from app.models.user import User
+
+    return [
+        User(id=n, email=f"owner{n}@test.local", hashed_password="!", is_active=True)
+        for n in KNOWN_OWNER_IDS
+    ]
+{%- endif %}
 
 
 # Swap the module-level ``cache`` singleton to the in-memory dict
@@ -224,6 +184,11 @@ def engine() -> Engine:
 
     # Create all tables once per test session
     SQLModel.metadata.create_all(engine)
+{%- if include_auth %}
+    with Session(engine) as seed:
+        seed.add_all(_known_owner_rows())
+        seed.commit()
+{%- endif %}
 
     return engine
 
@@ -300,6 +265,11 @@ async def app_owned_engine():
 
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+{%- if include_auth %}
+    async with AsyncSession(engine, expire_on_commit=False) as seed:
+        seed.add_all(_known_owner_rows())
+        await seed.commit()
+{%- endif %}
 
     yield engine
 
@@ -416,6 +386,11 @@ async def async_engine():
     # Create all tables once per test session
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+{%- if include_auth %}
+    async with AsyncSession(engine, expire_on_commit=False) as seed:
+        seed.add_all(_known_owner_rows())
+        await seed.commit()
+{%- endif %}
 
     yield engine
 
@@ -600,20 +575,26 @@ async def authenticated_client(
 async def admin_user(async_db_session: AsyncSession):
     """Create an admin user for tests that hit auth-protected endpoints.
 
-    Created before any other test data, so the ``UserService.create_user``
-    "first user becomes admin" rule auto-promotes it to ``role="admin"``.
+    Given ``role="admin"`` explicitly: the seeded numbered owners exist before
+    any fixture runs, so the "first user becomes admin" rule cannot apply.
     """
     from app.models.user import UserCreate
     from app.services.auth.users import UserService
 
     user_service = UserService(async_db_session)
-    return await user_service.create_user(
+    admin = await user_service.create_user(
         UserCreate(
             email="admin-fixture@test.com",
             full_name="Admin Fixture",
             password=DEFAULT_USER_PASSWORD,
         )
     )
+    # "First user becomes admin" no longer applies: conftest seeds the numbered
+    # owners tests refer to before any fixture runs. Say admin outright.
+    admin.role = "admin"
+    async_db_session.add(admin)
+    await async_db_session.flush()
+    return admin
 
 
 @pytest.fixture

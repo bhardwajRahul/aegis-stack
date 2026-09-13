@@ -19,9 +19,15 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import JSON, Column, Index, UniqueConstraint, text
 from sqlmodel import Field, Relationship, SQLModel
 
+
 from app.core.time import utcnow
 
 # ---------------------------------------------------------------------------
+# The customer references ``user.id`` only when the stack has auth; without it
+# ``user_id`` stays a plain nullable integer (anonymous checkouts). This is
+# what the ``payment_auth_link`` migration used to add afterwards.
+_USER_FK: str | None = {% if include_auth %}"user.id"{% else %}None{% endif %}
+
 # PaymentProvider
 # ---------------------------------------------------------------------------
 
@@ -37,7 +43,7 @@ class PaymentProvider(SQLModel, table=True):
     enabled: bool = Field(default=True)
     is_test_mode: bool = Field(default=True)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(
         default_factory=lambda: utcnow()
@@ -67,12 +73,12 @@ class PaymentCustomer(SQLModel, table=True):
     # user_id is nullable: anonymous checkouts (guest carts, donations,
     # pre-signup SaaS trials) have no app user yet. When the auth service
     # is included, a FK constraint to user.id is added via migration.
-    user_id: int | None = Field(default=None, index=True)
+    user_id: int | None = Field(default=None, index=True, foreign_key=_USER_FK)
     provider_id: int = Field(foreign_key="payment_provider.id", index=True)
     provider_customer_id: str = Field(index=True, max_length=128)
     email: str | None = Field(default=None, max_length=255)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(
         default_factory=lambda: utcnow()
@@ -110,7 +116,7 @@ class PaymentTransaction(SQLModel, table=True):
     currency: str = Field(max_length=3, default="usd")
     description: str | None = Field(default=None, max_length=512)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(
         default_factory=lambda: utcnow()
@@ -178,7 +184,7 @@ class PaymentSubscription(SQLModel, table=True):
     current_period_end: datetime
     cancel_at_period_end: bool = Field(default=False)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(
         default_factory=lambda: utcnow()
@@ -241,7 +247,7 @@ class PaymentDispute(SQLModel, table=True):
     event_type: str | None = Field(default=None, max_length=64)
 
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(
         default_factory=lambda: utcnow()

@@ -57,6 +57,9 @@ BUDGET: dict[str, int] = {
     "components/frontend/dashboard/modals/finance_modal/budget_cards.py": 681,
     "components/frontend/dashboard/modals/insights_modal.py": 3940,
     "services/system/health.py.jinja": 714,
+    # 457 lines of schemas in a package __init__; surfaced when ai/models gained
+    # a third module. Debt recorded at size; the fix is a schemas module.
+    "services/ai/models/__init__.py.jinja": 457,
     "cli/ai.py.jinja": 2338,
     "components/frontend/dashboard/modals/modal_sections.py": 2093,
     "components/frontend/dashboard/modals/voice_settings_tab.py": 1649,

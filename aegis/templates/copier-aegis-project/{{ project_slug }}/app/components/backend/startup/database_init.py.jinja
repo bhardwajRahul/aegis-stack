@@ -18,22 +18,10 @@ from app.components.backend.startup.schema_recovery import (
 )
 from app.core.log import logger
 
-{% if include_auth %}
-# Import models to register them with SQLModel metadata
-from app.models.user import User  # noqa: F401
-{% endif %}
-{% if include_auth_org %}
-from app.models.org import Organization, OrganizationMember  # noqa: F401
-{% endif %}
-{% if include_blog %}
-from app.services.blog.models import BlogPost, BlogPostTag, BlogTag  # noqa: F401
-{% endif %}
-{% if include_documents %}
-from app.services.documents.models import Document, DocumentTag  # noqa: F401
-{% endif %}
-{% if include_scheduler and scheduler_backend != "memory" %}
-from app.services.scheduler.models import JobExecution  # noqa: F401
-{% endif %}
+from app.core.model_registry import import_all_models  # noqa: E402
+
+import_all_models()
+
 
 {% set needs_migrations = include_auth or include_blog or include_documents or include_insights or include_payment or include_finance or (include_ai and ai_backend != "memory") or (include_scheduler and scheduler_backend != "memory") %}
 {% if database_engine == "postgres" and needs_migrations %}

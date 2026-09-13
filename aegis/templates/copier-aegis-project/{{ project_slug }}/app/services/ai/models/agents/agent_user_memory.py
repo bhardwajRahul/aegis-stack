@@ -22,6 +22,6 @@ class AgentUserMemory(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: str = Field(unique=True, index=True)
-    memory: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    memory: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

@@ -14,6 +14,7 @@ from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
     _bigint,
+    _OWNER_FK,
 )
 from sqlalchemy import (
     JSON,
@@ -129,14 +130,16 @@ class FinanceTransaction(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None)
     organization_id: int | None = Field(default=None)
     account_id: int = Field(foreign_key=f"{_FK}finance_account.id")
     connection_id: int | None = Field(
         default=None, foreign_key=f"{_FK}finance_connection.id"
     )
     # Forward FK (finance_import_batch, FIN-10) — plain column here.
-    import_batch_id: int | None = Field(default=None)
+    import_batch_id: int | None = Field(
+        default=None, foreign_key=f"{_FK}finance_import_batch.id"
+    )
     source: str = Field(max_length=16)
     external_id: str | None = Field(default=None)
     external_id_source: str | None = Field(default=None)
@@ -164,7 +167,7 @@ class FinanceTransaction(SQLModel, table=True):
     name: str | None = Field(default=None)
     original_description: str | None = Field(default=None)
     # Forward FK (finance_merchant, FIN-08) — plain column here.
-    merchant_id: int | None = Field(default=None)
+    merchant_id: int | None = Field(default=None, foreign_key=f"{_FK}finance_merchant.id")
     merchant_name: str | None = Field(default=None)
     # A brand logo the source attached to this transaction, provider-neutral:
     # each adapter translates its own enrichment into this one URL, and the
@@ -178,7 +181,7 @@ class FinanceTransaction(SQLModel, table=True):
     pfc_detailed: str | None = Field(default=None)
     pfc_confidence_level: str | None = Field(default=None)
     # Forward FK (finance_category, FIN-08) — plain column here.
-    category_id: int | None = Field(default=None)
+    category_id: int | None = Field(default=None, foreign_key=f"{_FK}finance_category.id")
     category_source: str = Field(default="unset", max_length=12)
     is_user_categorized: bool = Field(default=False)
     is_reviewed: bool = Field(default=False)
@@ -190,7 +193,9 @@ class FinanceTransaction(SQLModel, table=True):
     status: str = Field(default="posted", max_length=12)
     is_transfer: bool = Field(default=False)
     # Circular FK (finance_transfer) — plain column; constraint via alter_tables.
-    transfer_group_id: int | None = Field(default=None)
+    transfer_group_id: int | None = Field(
+        default=None, foreign_key=f"{_FK}finance_transfer.id"
+    )
     transfer_pair_transaction_id: int | None = Field(
         default=None, foreign_key=f"{_FK}finance_transaction.id"
     )
@@ -201,7 +206,9 @@ class FinanceTransaction(SQLModel, table=True):
         default=None, foreign_key=f"{_FK}finance_transaction.id"
     )
     # Forward FK (finance_recurring_stream, FIN-10) — plain column here.
-    recurring_stream_id: int | None = Field(default=None)
+    recurring_stream_id: int | None = Field(
+        default=None, foreign_key=f"{_FK}finance_recurring_stream.id"
+    )
     reconciled_status: str = Field(default="uncleared", max_length=12)
     location: dict[str, Any] | None = Field(
         default=None, sa_column=Column("location", JSON)
@@ -216,7 +223,7 @@ class FinanceTransaction(SQLModel, table=True):
     removed_at: datetime | None = Field(default=None)
     deleted_at: datetime | None = Field(default=None)
     metadata_: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSON)
+        default_factory=dict, sa_column=Column("metadata", JSON, nullable=False)
     )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -247,11 +254,11 @@ class FinanceTransactionSplit(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None)
     parent_transaction_id: int = Field(foreign_key=f"{_FK}finance_transaction.id")
     # Forward FKs (finance_category / finance_merchant, FIN-08) — plain columns.
-    category_id: int | None = Field(default=None)
-    merchant_id: int | None = Field(default=None)
+    category_id: int | None = Field(default=None, foreign_key=f"{_FK}finance_category.id")
+    merchant_id: int | None = Field(default=None, foreign_key=f"{_FK}finance_merchant.id")
     amount: int = _bigint("amount", nullable=False, default=0)
     currency: str = Field(
         default="usd", foreign_key=f"{_FK}finance_currency.code", max_length=16
@@ -313,7 +320,7 @@ class FinanceTransfer(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None)
     organization_id: int | None = Field(default=None)
     from_account_id: int | None = Field(
         default=None, foreign_key=f"{_FK}finance_account.id"

@@ -13,6 +13,7 @@ from app.core.time import utcnow
 from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
+    _OWNER_FK,
 )
 from sqlalchemy import (
     JSON,
@@ -55,7 +56,7 @@ class FinanceImportProfile(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(default=None)
+    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None)
     organization_id: int | None = Field(default=None)
     institution_id: int | None = Field(
         default=None, foreign_key=f"{_FK}finance_institution.id"
@@ -63,10 +64,10 @@ class FinanceImportProfile(SQLModel, table=True):
     name: str = Field(max_length=128)
     source_format: str = Field(max_length=8)
     header_signature: list[Any] = Field(
-        default_factory=list, sa_column=Column("header_signature", JSON)
+        default_factory=list, sa_column=Column("header_signature", JSON, nullable=False)
     )
     column_mapping: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("column_mapping", JSON)
+        default_factory=dict, sa_column=Column("column_mapping", JSON, nullable=False)
     )
     date_format: str | None = Field(default=None)
     amount_sign_convention: str = Field(max_length=20)
@@ -121,7 +122,7 @@ class FinanceImportBatch(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     organization_id: int | None = Field(default=None)
     connection_id: int | None = Field(
         default=None, foreign_key=f"{_FK}finance_connection.id"
@@ -177,12 +178,12 @@ class FinanceImportBatchRow(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     import_batch_id: int = Field(foreign_key=f"{_FK}finance_import_batch.id")
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     account_id: int | None = Field(default=None, foreign_key=f"{_FK}finance_account.id")
     row_number: int
     raw_line: str | None = Field(default=None)
     parsed: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("parsed", JSON)
+        default_factory=dict, sa_column=Column("parsed", JSON, nullable=False)
     )
     content_hash: str | None = Field(default=None, max_length=64)
     fitid: str | None = Field(default=None)
@@ -220,7 +221,7 @@ class FinanceAttachment(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int = Field()
+    owner_user_id: int = Field(foreign_key=_OWNER_FK)
     organization_id: int | None = Field(default=None)
     transaction_id: int | None = Field(
         default=None, foreign_key=f"{_FK}finance_transaction.id"
