@@ -157,11 +157,17 @@ class ServiceMigrationSpec:
     schema: str | None = None
     # Proof this migration already ran, for the startup hook that
     # re-adopts a persisted database by stamping instead of replaying
-    # DDL. ``("table", name)``, ``("column", table, col)`` or
-    # ``("foreign_key", table, col)``. A migration without one opts out
+    # DDL. ``("table", name)``, ``("column", table, col)``,
+    # ``("foreign_key", table, col)``, or ``("row", table, where)`` for a
+    # data-only revision (data_sql). A migration without one opts out
     # of that recovery, so every shipped migration should carry it;
     # in-tree services declare theirs in ``migration_signatures.py``.
     stamp_signature: tuple[str, ...] | None = None
+    # Raw statements run after the DDL in ``upgrade()``, for the rare data
+    # a schema change makes mandatory (a row a new FK points at). Each
+    # must be idempotent: ``aegis update`` can deliver a migration to a
+    # database that already holds the row. Not reversed in ``downgrade``.
+    data_sql: list[str] = field(default_factory=list)
 
 
 # ============================================================================
@@ -4002,6 +4008,24 @@ def _build_finance_auth_link(
             )
             for table in _FINANCE_OWNED_TABLES
         ],
+        # Finance writes ``owner_user_id = 0`` when no owner is given
+        # (standalone installs, AI tools). With the FKs above that value
+        # must exist in ``user`` or every such insert fails (#1110). One
+        # inactive row, never a login; idempotent so re-delivery is safe.
+        data_sql=[_sentinel_owner_insert(user_ref_schema)],
+    )
+
+
+def _sentinel_owner_insert(user_ref_schema: str | None) -> str:
+    user_table = f'"{user_ref_schema}"."user"' if user_ref_schema else '"user"'
+    return (
+        f"INSERT INTO {user_table} "
+        "(id, email, is_active, is_verified, hashed_password, "
+        "failed_login_attempts, created_at) "
+        # Boolean literals, not 0: Postgres refuses an integer in a boolean
+        # column and SQLite accepts FALSE (3.23+), so one statement serves both.
+        "SELECT 0, 'standalone@finance.local', FALSE, FALSE, '!', 0, CURRENT_TIMESTAMP "
+        f"WHERE NOT EXISTS (SELECT 1 FROM {user_table} WHERE id = 0)"
     )
 
 
@@ -4279,6 +4303,9 @@ def upgrade() -> None:
 {% endfor %}
 
 {% endfor %}
+{% for stmt in data_sql %}
+    op.execute("""{{ stmt }}""")
+{% endfor %}
 
 def downgrade() -> None:
     """Reverse {{ service_name }} migration."""
@@ -4515,6 +4542,7 @@ def _render_migration(
         tables=tables_data,
         alter_tables=alter_tables_data,
         forward_only=spec.forward_only,
+        data_sql=spec.data_sql,
         schema=spec.schema,
     )
 
@@ -4644,7 +4672,84 @@ def generate_revisions(
         raise MigrationGenerationError(
             f"migrate_gen failed for {', '.join(services)}:\n{result.stderr[-2000:]}"
         )
-    return sorted(set(versions_dir.glob("*.py")) - before)
+    written = sorted(set(versions_dir.glob("*.py")) - before)
+    written.extend(_place_data_statements(project_path, services, written))
+    return sorted(written)
+
+
+_DATA_REVISION = '''"""{description}
+
+Revision ID: {revision}
+Revises: {down_revision}
+Create Date: {create_date}
+
+"""
+from alembic import op
+
+# revision identifiers, used by Alembic.
+revision = {revision!r}
+down_revision = {down_revision!r}
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+{body}
+
+
+def downgrade() -> None:
+    pass
+'''
+
+
+def _data_lines(statements: list[str]) -> str:
+    return "\n".join(f'    op.execute("""{stmt}""")' for stmt in statements)
+
+
+def _place_data_statements(
+    project_path: Path, services: list[str], written: list[Path]
+) -> list[Path]:
+    """Give every service's ``data_sql`` a revision to run in.
+
+    The models decide the DDL; ``data_sql`` is the one thing they cannot
+    describe (a row a new FK points at, #1110). It rides in the revision
+    the run just wrote for its service, or - when the models produced
+    nothing for that service, as ``finance_auth_link`` does now that its
+    FKs are inline in ``finance`` - in a data-only revision written here.
+    Each statement must be idempotent: ``aegis update`` can deliver a
+    revision to a database that already holds the row.
+
+    Returns the data-only revisions this call created.
+    """
+    specs = _get_migration_specs()
+    created: list[Path] = []
+    for service in services:
+        spec = specs.get(service)
+        if spec is None or not spec.data_sql:
+            continue
+        own = [p for p in written if p.name.endswith(f"_{service}.py")]
+        if own:
+            src = own[0].read_text()
+            head, sep, tail = src.rpartition("\n\n\ndef downgrade")
+            if not sep:
+                raise MigrationGenerationError(
+                    f"{own[0].name}: no downgrade() to anchor data statements"
+                )
+            own[0].write_text(f"{head}\n{_data_lines(spec.data_sql)}{sep}{tail}")
+        elif not service_has_migration(project_path, service):
+            revision = get_next_revision_id(project_path)
+            path = get_versions_dir(project_path) / f"{revision}_{service}.py"
+            path.write_text(
+                _DATA_REVISION.format(
+                    description=spec.description,
+                    revision=revision,
+                    down_revision=get_previous_revision(project_path),
+                    create_date=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f"),
+                    body=_data_lines(spec.data_sql),
+                )
+            )
+            created.append(path)
+    return created
 
 
 def generate_migration(

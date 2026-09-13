@@ -74,3 +74,33 @@ def test_signatures_name_real_model_objects() -> None:
         assert name in tables or name in bare or name.split(".")[-1] in bare, (
             f"signature for '{service}' names '{name}', which no model declares"
         )
+
+
+def test_row_signature_checks_the_live_database() -> None:
+    """``("row", table, where)``: the hook must replay a data-only revision
+    whose row is missing and stamp it when the row is there."""
+    database_init = pytest.importorskip(
+        "app.components.backend.startup.database_init",
+        reason="no database component in this stack",
+    )
+    row_exists = getattr(database_init, "_row_exists", None)
+    if row_exists is None:
+        pytest.skip("re-adoption hook is Postgres-only in this stack")
+    import sqlalchemy as sa
+
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as conn:
+        conn.execute(sa.text('CREATE TABLE "user" (id INTEGER PRIMARY KEY, email TEXT)'))
+        assert row_exists(conn, "user", "id = 0") is False
+        conn.execute(sa.text("INSERT INTO \"user\" VALUES (0, 'standalone@finance.local')"))
+        assert row_exists(conn, "user", "id = 0") is True
+        # A table that does not exist is "not applied", never an exception.
+        assert row_exists(conn, "nope", "id = 0") is False
+
+
+def test_data_only_revisions_use_the_row_form() -> None:
+    """A data-only revision cannot be proven by a schema object."""
+    sig = signatures_module.SERVICE_MIGRATION_SIGNATURES.get("finance_auth_link")
+    if sig is None:
+        pytest.skip("finance_auth_link not in this stack")
+    assert sig[0] == "row" and sig[1] == "user" and "id = 0" in sig[2]

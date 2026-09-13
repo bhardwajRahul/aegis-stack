@@ -993,6 +993,38 @@ def _settings_field_names(config_path: Path) -> set[str] | None:
     return None
 
 
+def stale_env_defaults(
+    project_path: Path, answers: dict[str, Any]
+) -> list[RemovedEnvKey]:
+    """Keys still holding a template default that later became harmful.
+
+    Every project once shipped ``AEGIS_STACK_TAG=aegis-stack:latest``, so two
+    projects on one machine shared one image tag and ``docker compose up``
+    in one silently ran the other's build (#1027). The template default is
+    now the project slug; a project that kept the old value is told. Report
+    only - ``.env`` is never edited.
+    """
+    env_path = project_path / ".env"
+    if not env_path.exists():
+        return []
+    slug = answers.get("project_slug") or project_path.name
+    hits: list[RemovedEnvKey] = []
+    for line in env_path.read_text().splitlines():
+        line = line.strip().removeprefix("export ").strip()
+        if (
+            line.startswith("AEGIS_STACK_TAG=")
+            and line.split("=", 1)[1].strip().strip("\"'") == "aegis-stack:latest"
+        ):
+            hits.append(
+                RemovedEnvKey(
+                    "AEGIS_STACK_TAG",
+                    f"shared with every other Aegis project on this machine; "
+                    f"set AEGIS_STACK_TAG={slug}:latest",
+                )
+            )
+    return hits
+
+
 def removed_env_keys(project_path: Path) -> list[RemovedEnvKey]:
     """``.env`` keys the post-update ``Settings`` no longer declares (#1020).
 

@@ -55,6 +55,21 @@ BEHAVIOR_CHANGES: tuple[BehaviorChange, ...] = (
         ),
         restore="AUTH_ENABLED=false in .env keeps the dashboard open (synthetic dev user).",
     ),
+    BehaviorChange(
+        since="0.7.0",
+        when=lambda a: _truthy(a, "include_scheduler")
+        and a.get("scheduler_backend", "memory") != "memory",
+        message=(
+            "The scheduler now treats code as the source of truth for jobs: "
+            "on boot it deletes every persisted job whose id is not registered "
+            "in create_scheduler. Schedules added at runtime (UI/CLI) count as "
+            "orphans on the first boot after this update."
+        ),
+        restore=(
+            "The deleted rows are exported to DATABASE_BACKUP_DIR/orphan_jobs_<ts>.json "
+            "before removal; register the ones you want in create_scheduler."
+        ),
+    ),
 )
 
 

@@ -18,6 +18,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 {% if scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from app.core.db import engine, init_database, db_session
+from app.services.scheduler.orphans import drop_unknown_persisted_jobs
 from app.services.scheduler.execution_log import (
     cancel_stale_running_rows,
     prune_executions,
@@ -66,47 +67,6 @@ from app.services.system import activity
 from .heartbeat import is_heartbeat_event, register_heartbeat_job
 
 {% if scheduler_backend != "memory" %}
-
-def _drop_unknown_persisted_jobs(scheduler: AsyncIOScheduler) -> None:
-    """Delete persisted rows whose ID isn't registered in code.
-
-    ``replace_existing=True`` keeps live jobs in sync when their triggers
-    change, but does nothing for jobs that were *removed* from
-    ``create_scheduler``. Without this sweep, the persistent jobstore
-    would keep firing the obsolete job indefinitely — breaking the
-    "code is the source of truth" promise. Runs after the ``add_job``
-    pass so the set of intended IDs is whatever ``scheduler.get_jobs()``
-    reports right now.
-    """
-    from sqlmodel import text
-
-    try:
-        intended_ids = {job.id for job in scheduler.get_jobs()}
-        with db_session() as session:
-            persisted_ids = {
-                row[0]
-                for row in session.exec(
-                    text("SELECT id FROM apscheduler_jobs")
-                ).fetchall()
-            }
-
-        orphans = persisted_ids - intended_ids
-        if not orphans:
-            return
-
-        with db_session(autocommit=True) as session:
-            for job_id in orphans:
-                session.exec(
-                    text("DELETE FROM apscheduler_jobs WHERE id = :id"),
-                    params={"id": job_id},
-                )
-        logger.info(
-            f"Removed {len(orphans)} orphan scheduled job(s) "
-            f"(no longer in code): {sorted(orphans)}"
-        )
-    except Exception as e:
-        logger.debug(f"Orphan job sweep skipped: {e}")
-
 
 def _cleanup_stale_jobs() -> None:
     """Remove persisted jobs whose func_ref can no longer be imported.
@@ -430,7 +390,7 @@ def create_scheduler() -> AsyncIOScheduler:
     # "schedule changed" case for jobs that still exist; this covers the
     # "job deleted" case so persistent storage doesn't keep firing an
     # obsolete job ID forever.
-    _drop_unknown_persisted_jobs(scheduler)
+    drop_unknown_persisted_jobs(scheduler)
 {% endif %}
 
     return scheduler

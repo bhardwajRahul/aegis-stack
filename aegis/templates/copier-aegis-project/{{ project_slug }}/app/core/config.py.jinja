@@ -93,7 +93,7 @@ class Settings(
     AUTO_RELOAD: bool = False
 
     # Docker settings (used by docker-compose)
-    AEGIS_STACK_TAG: str = "aegis-stack:latest"
+    AEGIS_STACK_TAG: str = "{{ project_slug }}:latest"
     AEGIS_STACK_VERSION: str = "dev"
 
     # Health monitoring and alerting

@@ -613,7 +613,10 @@ class TestUpdateCommandRollback:
 
         project_path = project_factory("base_with_auth_service")
         # A stale key the updated Settings no longer declares.
-        (project_path / ".env").write_text("DOCS_AUTH_ENABLED=true\nAPP_ENV=dev\n")
+        env_text = (
+            "DOCS_AUTH_ENABLED=true\nAPP_ENV=dev\nAEGIS_STACK_TAG=aegis-stack:latest\n"
+        )
+        (project_path / ".env").write_text(env_text)
         # Pin the recorded template version BELOW the auth gate (0.6.12) so
         # the update genuinely crosses it.
         answers_file = project_path / ".copier-answers.yml"
@@ -654,10 +657,10 @@ class TestUpdateCommandRollback:
         assert "DOCS_USERNAME" in out
         # #1029 - the behavior flip, and the flag that restores the old one.
         assert "AUTH_ENABLED=false" in out
+        # #1027 - the shared image tag is named, with the slug to use.
+        assert "AEGIS_STACK_TAG=" in out and ":latest" in out
         # Report only: .env is credentials and must be byte-identical.
-        assert (
-            project_path / ".env"
-        ).read_text() == "DOCS_AUTH_ENABLED=true\nAPP_ENV=dev\n"
+        assert (project_path / ".env").read_text() == env_text
 
     @patch("aegis.commands.update.sync_template_changes")
     @patch("aegis.commands.update.run_post_generation_tasks")
@@ -728,6 +731,8 @@ class TestUpdateCommandRollback:
         )
         assert result.returncode == 0, strip_ansi_codes(result.stdout)
         assert mock_post_gen.called
+        # #1019: the update path (and therefore finish) re-locks.
+        assert mock_post_gen.call_args.kwargs["relock"] is True
         assert answers_file.read_text() != version_before
         assert not pending.exists()
 

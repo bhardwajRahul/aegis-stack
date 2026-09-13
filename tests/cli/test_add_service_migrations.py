@@ -13,7 +13,7 @@ import sqlite3
 import pytest
 
 from tests.cli.conftest import ProjectFactory
-from tests.cli.test_utils import run_aegis_command
+from tests.cli.test_utils import run_aegis_command, run_project_command
 
 
 class TestAddServiceMigrationGeneration:
@@ -374,3 +374,57 @@ class TestAddServiceAIBackendMigrations:
         assert "Bootstrapping alembic" not in result.stdout
         assert "Applying database migrations" not in result.stdout
         assert "Generated migration" not in result.stdout
+
+
+class TestAddAuthOntoFinance:
+    def test_sentinel_owner_lands_after_user_exists(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """#1110 on the add path: a standalone finance project gains auth.
+        The owner FKs now arrive in a later revision than the finance
+        tables, and the row they point at (user 0) must land in that pass,
+        after ``user`` exists, so the run's order is auth, auth_tokens,
+        finance_auth_link."""
+        import sqlite3
+
+        project_path = project_factory(
+            components=["database", "scheduler"], services=["finance"]
+        )
+        versions_dir = project_path / "alembic" / "versions"
+        before = sorted(p.name for p in versions_dir.glob("*.py"))
+        assert not any("auth" in n for n in before)
+        # The cache copy carries a venv whose interpreter links are only
+        # valid at the cache's own path (as test_migrations_match_models
+        # notes); the post-add ``alembic upgrade`` needs a working one.
+        import shutil
+
+        shutil.rmtree(project_path / ".venv", ignore_errors=True)
+        # UV_PYTHON pins the interpreter for the aegis tool in CI (3.11);
+        # the project resolves its own requires-python.
+        sync = run_project_command(
+            ["uv", "sync", "--extra", "dev"],
+            project_path,
+            timeout=600,
+            env_overrides={"VIRTUAL_ENV": "", "UV_PYTHON": ""},
+        )
+        assert sync.success, sync.stderr[-800:]
+
+        result = run_aegis_command(
+            "add-service", "auth", "--project-path", str(project_path), "--yes"
+        )
+        assert result.returncode == 0, f"Add-service failed: {result.stderr}"
+
+        added = sorted({p.name for p in versions_dir.glob("*.py")} - set(before))
+        suffixes = [n.split("_", 1)[1] for n in added]
+        assert suffixes.index("auth.py") < suffixes.index("finance_auth_link.py")
+        link = (
+            versions_dir / added[suffixes.index("finance_auth_link.py")]
+        ).read_text()
+        assert "standalone@finance.local" in link
+
+        db_path = project_path / "data" / "app.db"
+        assert db_path.exists(), result.stdout[-1500:]
+        db = sqlite3.connect(db_path)
+        tables = {r[0] for r in db.execute("select name from sqlite_master")}
+        assert "user" in tables, (sorted(tables), result.stdout[-1500:])
+        assert db.execute("select id from user where id = 0").fetchall() == [(0,)]
