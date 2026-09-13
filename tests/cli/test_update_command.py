@@ -659,6 +659,88 @@ class TestUpdateCommandRollback:
             project_path / ".env"
         ).read_text() == "DOCS_AUTH_ENABLED=true\nAPP_ENV=dev\n"
 
+    @patch("aegis.commands.update.sync_template_changes")
+    @patch("aegis.commands.update.run_post_generation_tasks")
+    @patch("aegis.commands.update.generate_missing_migrations")
+    @patch("copier.run_update")
+    @patch("aegis.commands.update.get_current_template_commit")
+    @patch("aegis.commands.update.create_backup_point")
+    def test_conflicted_update_reports_markers_and_finishes_later(
+        self,
+        mock_create_backup: MagicMock,
+        mock_get_commit: MagicMock,
+        mock_copier_update: MagicMock,
+        mock_generate: MagicMock,
+        mock_post_gen: MagicMock,
+        mock_sync: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """#1016 + #1018, the whole conflicted-update lifecycle.
+
+        sector-7g: 60 files were left with ``<<<<<<<`` markers that the
+        report never named, and after hand-resolving them nothing advanced
+        ``_template_version`` or ran ``uv sync`` - the next update re-merged
+        the whole range.
+        """
+        mock_create_backup.return_value = None
+        mock_get_commit.return_value = "different-commit"
+        mock_post_gen.return_value = True
+        mock_generate.return_value = []
+        project_path = project_factory("base_with_auth_service")
+        answers_file = project_path / ".copier-answers.yml"
+        version_before = answers_file.read_text()
+
+        def conflicted_sync(target: Path, *a: object, **k: object) -> SyncResult:
+            # The merge writes markers into a file the report must name.
+            (target / "Makefile").write_text(
+                "<<<<<<< ours\nserve:\n=======\nrun:\n>>>>>>> theirs\n"
+            )
+            return SyncResult(conflicts=["Makefile"])
+
+        mock_sync.side_effect = conflicted_sync
+
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--yes"
+        )
+        out = strip_ansi_codes(result.stdout)
+
+        # #1016 - the marker file is in the printed report, with the fix step.
+        assert "Makefile" in out
+        assert "aegis update --finish" in out
+        # Unfinished: post-gen skipped, baseline not advanced, state recorded.
+        assert not mock_post_gen.called
+        assert answers_file.read_text() == version_before
+        pending = project_path / ".git" / "aegis-update-pending.json"
+        assert pending.exists()
+
+        # #1018 - finishing with markers still present refuses and names them.
+        result = run_aegis_command(
+            "update", "--finish", "--project-path", str(project_path)
+        )
+        assert result.returncode == 1
+        assert "Makefile" in strip_ansi_codes(result.stdout)
+        assert not mock_post_gen.called
+
+        # Resolve, then finish: post-gen runs, baseline advances, state cleared.
+        (project_path / "Makefile").write_text("serve:\n")
+        result = run_aegis_command(
+            "update", "--finish", "--project-path", str(project_path)
+        )
+        assert result.returncode == 0, strip_ansi_codes(result.stdout)
+        assert mock_post_gen.called
+        assert answers_file.read_text() != version_before
+        assert not pending.exists()
+
+    def test_finish_without_pending_update_is_an_error(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        project_path = project_factory("base_with_auth_service")
+        result = run_aegis_command(
+            "update", "--finish", "--project-path", str(project_path)
+        )
+        assert result.returncode == 1
+        assert "nothing to finish" in strip_ansi_codes(result.stdout).lower()
+
     @patch("aegis.commands.update.rollback_to_backup")
     @patch("aegis.commands.update.create_backup_point")
     @patch("copier.run_update")

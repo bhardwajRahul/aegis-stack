@@ -5,10 +5,12 @@ Updates an existing Aegis Stack project to a newer template version using
 Copier's git-aware update mechanism.
 """
 
+import json
 import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -159,6 +161,128 @@ def _template_version_for_ref(target_ref: str) -> str:
     return target_ref
 
 
+_PENDING_FILE = Path(".git") / "aegis-update-pending.json"
+
+
+def _pending_path(project_path: Path) -> Path:
+    # Inside .git so it is never committed, yet survives until the user
+    # finishes; a tracked file would dirty the tree the finish step needs.
+    return project_path / _PENDING_FILE
+
+
+def _record_pending_update(
+    project_path: Path, *, target_ref: str, template_root: Path, backup_tag: str | None
+) -> None:
+    """Remember a conflicted update so ``--finish`` can complete it (#1018).
+
+    On conflicts the baseline advance and post-gen are skipped on purpose;
+    this is what lets a later run pick them up instead of re-merging.
+    """
+    _pending_path(project_path).write_text(
+        json.dumps(
+            {
+                "target_ref": target_ref,
+                "template_root": str(template_root),
+                "backup_tag": backup_tag,
+            }
+        )
+    )
+
+
+def _load_pending_update(project_path: Path) -> dict[str, Any] | None:
+    path = _pending_path(project_path)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _run_postgen(target_path: Path, answers: dict[str, Any]) -> bool:
+    """Missing migrations + post-generation tasks. Returns overall success."""
+    include_auth = answers.get(AnswerKeys.AUTH, False)
+    include_ai = answers.get(AnswerKeys.AI, False)
+    include_insights = answers.get(AnswerKeys.INSIGHTS, False)
+    include_payment = answers.get(AnswerKeys.PAYMENT, False)
+    include_blog = answers.get(AnswerKeys.BLOG, False)
+    include_documents = answers.get(AnswerKeys.DOCUMENTS, False)
+    ai_backend = answers.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
+    ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
+    include_migrations = (
+        include_auth
+        or ai_needs_migrations
+        or include_insights
+        or include_payment
+        or include_blog
+        or include_documents
+    )
+
+    # Migrations the project predates. A project generated before a
+    # revision existed never receives it otherwise: ``add-service``
+    # and ``ManualUpdater.add_service`` both call this, ``update``
+    # did not, so a v0.10.1 auth project kept ``001 -> 003`` with
+    # ``auth_tokens`` never written (#1024). Must run BEFORE the
+    # ``alembic upgrade head`` inside post-gen, or the DB is
+    # stamped past a revision that only lands afterwards.
+    if include_migrations:
+        for migration_path in generate_missing_migrations(target_path, answers):
+            brand.success(
+                f"   {t('add_service.generated_migration', name=migration_path.name)}"
+            )
+
+    typer.echo(t("update.running_postgen"))
+    postgen_report: dict[str, bool] = {}
+    tasks_success = run_post_generation_tasks(
+        target_path,
+        include_migrations=include_migrations,
+        report=postgen_report,
+    )
+    # A failed upgrade is non-fatal to generation but must not be
+    # reported as a clean update: the deployed app is what crashes
+    # (UndefinedColumnError on first request), not this command.
+    if postgen_report.get("migrations_ok") is False:
+        tasks_success = False
+    return tasks_success
+
+
+def _finish_update(target_path: Path, pending: dict[str, Any]) -> None:
+    """Complete a conflicted update once the user has resolved it (#1018).
+
+    Refuses while any conflict remains: advancing the baseline past
+    unresolved markers would make the next update skip the very hunks the
+    user has not merged yet.
+    """
+    conflicts = analyze_conflict_files(target_path)
+    if conflicts:
+        brand.error(t("update.finish_blocked", count=len(conflicts)))
+        for conflict in conflicts:
+            typer.echo(f"      - {conflict['original']}")
+        raise typer.Exit(1)
+
+    answers = load_copier_answers(target_path) or {}
+    tasks_success = _run_postgen(target_path, answers)
+    _advance_copier_tracking(
+        target_path, pending["target_ref"], Path(pending["template_root"])
+    )
+    _pending_path(target_path).unlink(missing_ok=True)
+    backup_tag = pending.get("backup_tag")
+    if backup_tag and tasks_success:
+        cleanup_backup_tag(target_path, backup_tag)
+
+    typer.echo("")
+    if tasks_success:
+        brand.success(t("update.finish_done"))
+    else:
+        brand.warn(t("update.partial_success"))
+        typer.echo(t("update.partial_detail"))
+    typer.echo("")
+    typer.echo(t("update.next_steps"))
+    typer.echo(t("update.next_review"))
+    typer.echo(t("update.next_test"))
+    typer.echo(t("update.next_commit"))
+
+
 def _advance_copier_tracking(
     project_path: Path, target_ref: str, template_root: Path
 ) -> None:
@@ -238,6 +362,11 @@ def update_command(
         "-y",
         help=lazy_t("common.help_yes"),
     ),
+    finish: bool = typer.Option(
+        False,
+        "--finish",
+        help=lazy_t("update.help_opt_finish"),
+    ),
 ) -> None:
     """
     Update project to a newer template version.
@@ -280,6 +409,19 @@ def update_command(
         raise typer.Exit(1)
 
     typer.echo(t("update.project", path=target_path))
+
+    # A previous run stopped on conflicts. Finish it (explicitly, or
+    # because the user simply ran `aegis update` again) instead of
+    # re-merging the whole range from the stale baseline. The tree is
+    # dirty by definition here, so this comes before the clean check.
+    pending = _load_pending_update(target_path)
+    if finish or pending:
+        if not pending:
+            brand.error(t("update.finish_nothing"))
+            raise typer.Exit(1)
+        typer.echo(t("update.finish_resuming", ref=pending["target_ref"]))
+        _finish_update(target_path, pending)
+        return
 
     # Check git status
     is_clean, git_message = validate_clean_git_tree(target_path)
@@ -650,52 +792,18 @@ def update_command(
             # Conflicts mean the update isn't done — the user still has
             # ``<<<<<<<`` markers to resolve and ``uv sync`` to run.
             # Routing through ``tasks_success = False`` flips the result
-            # banner to the yellow "partial success" branch (line 605-609)
-            # AND keeps the backup tag alive (gated on this flag below).
+            # banner to the yellow "partial success" branch AND keeps the
+            # backup tag alive (gated on this flag below). The pending
+            # record is what ``--finish`` completes later (#1018).
             tasks_success = False
-        else:
-            include_auth = answers.get(AnswerKeys.AUTH, False)
-            include_ai = answers.get(AnswerKeys.AI, False)
-            include_insights = answers.get(AnswerKeys.INSIGHTS, False)
-            include_payment = answers.get(AnswerKeys.PAYMENT, False)
-            include_blog = answers.get(AnswerKeys.BLOG, False)
-            include_documents = answers.get(AnswerKeys.DOCUMENTS, False)
-            ai_backend = answers.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
-            ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
-            include_migrations = (
-                include_auth
-                or ai_needs_migrations
-                or include_insights
-                or include_payment
-                or include_blog
-                or include_documents
-            )
-
-            # Migrations the project predates. A project generated before a
-            # revision existed never receives it otherwise: ``add-service``
-            # and ``ManualUpdater.add_service`` both call this, ``update``
-            # did not, so a v0.10.1 auth project kept ``001 -> 003`` with
-            # ``auth_tokens`` never written (#1024). Must run BEFORE the
-            # ``alembic upgrade head`` inside post-gen, or the DB is
-            # stamped past a revision that only lands afterwards.
-            if include_migrations:
-                for migration_path in generate_missing_migrations(target_path, answers):
-                    brand.success(
-                        f"   {t('add_service.generated_migration', name=migration_path.name)}"
-                    )
-
-            typer.echo(t("update.running_postgen"))
-            postgen_report: dict[str, bool] = {}
-            tasks_success = run_post_generation_tasks(
+            _record_pending_update(
                 target_path,
-                include_migrations=include_migrations,
-                report=postgen_report,
+                target_ref=target_ref,
+                template_root=template_root,
+                backup_tag=backup_tag,
             )
-            # A failed upgrade is non-fatal to generation but must not be
-            # reported as a clean update: the deployed app is what crashes
-            # (UndefinedColumnError on first request), not this command.
-            if postgen_report.get("migrations_ok") is False:
-                tasks_success = False
+        else:
+            tasks_success = _run_postgen(target_path, answers)
 
         # Update __aegis_version__ directly (Copier doesn't re-render unchanged files)
         init_file = target_path / "app" / "__init__.py"
@@ -767,8 +875,11 @@ def update_command(
         typer.echo(t("update.next_conflicts"))
         typer.echo(t("update.next_test"))
         typer.echo(t("update.next_commit"))
+        if sync_result.conflicts:
+            typer.echo(t("update.next_finish"))
 
-        # Check for conflict files and display enhanced report
+        # Every file left for the user: .rej hunks AND inline markers, the
+        # latter scanned from the written tree as a safety net (#1016).
         conflicts = analyze_conflict_files(target_path)
         if conflicts:
             typer.echo("")

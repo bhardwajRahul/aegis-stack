@@ -6,6 +6,7 @@ native update mechanism with a copier.yml at the repository root.
 """
 
 import logging
+import re
 import subprocess
 from pathlib import Path
 
@@ -903,28 +904,56 @@ def get_commit_for_version(
         return None
 
 
+_MARKER_SKIP_DIRS = frozenset(
+    {".git", ".venv", "node_modules", "__pycache__", ".mypy_cache", ".ruff_cache"}
+)
+_MARKER_RE = re.compile(r"^<{7}(?: |$)", re.MULTILINE)
+
+
+def _inline_marker_files(project_path: Path) -> list[Path]:
+    """Text files carrying git conflict markers (``<<<<<<<`` at line start).
+
+    The 3-way merge in ``sync_template_changes`` leaves markers in place,
+    not .rej files, so a report that only globs ``*.rej`` misses them
+    (#1016: 60 such files on sector-7g, unmentioned). A marker in a
+    written file is never intentional output, so the whole tree is
+    scanned as the safety net regardless of which merge path ran.
+    """
+    hits: list[Path] = []
+    for path in sorted(project_path.rglob("*")):
+        if not path.is_file() or path.suffix == ".rej":
+            continue
+        if _MARKER_SKIP_DIRS & set(path.relative_to(project_path).parts[:-1]):
+            continue
+        try:
+            text = path.read_bytes()
+            if b"\x00" in text[:1024]:
+                continue  # binary
+            if _MARKER_RE.search(text.decode("utf-8")):
+                hits.append(path)
+        except (OSError, UnicodeDecodeError):
+            continue
+    return hits
+
+
 def analyze_conflict_files(project_path: Path) -> list[dict[str, str]]:
     """
-    Analyze .rej files created by Copier during conflict resolution.
+    Find every file the update left for the user to resolve.
 
-    Args:
-        project_path: Path to project directory
+    Two shapes: ``.rej`` files (Copier's rejected hunks, ``kind="rej"``)
+    and files containing inline ``<<<<<<<`` markers (our 3-way merge,
+    ``kind="markers"``). Both are the user's problem and both must print.
 
     Returns:
-        List of conflict info dicts with keys: path, original, size, summary
+        List of conflict info dicts with keys: kind, path, original, size, summary
     """
     conflicts = []
 
-    # Find all .rej files
-    rej_files = list(project_path.rglob("*.rej"))
-
-    for rej_file in rej_files:
-        # Get the original file path
+    for rej_file in project_path.rglob("*.rej"):
         original_path = rej_file.with_suffix("")
         relative_path = rej_file.relative_to(project_path)
         relative_original = original_path.relative_to(project_path)
 
-        # Read the .rej file content to get a summary
         try:
             rej_content = rej_file.read_text()
             line_count = len(rej_content.strip().split("\n"))
@@ -935,10 +964,24 @@ def analyze_conflict_files(project_path: Path) -> list[dict[str, str]]:
 
         conflicts.append(
             {
+                "kind": "rej",
                 "path": str(relative_path),
                 "original": str(relative_original),
                 "size": f"{rej_file.stat().st_size} bytes",
                 "summary": summary,
+            }
+        )
+
+    for marked in _inline_marker_files(project_path):
+        relative = str(marked.relative_to(project_path))
+        blocks = len(_MARKER_RE.findall(marked.read_text()))
+        conflicts.append(
+            {
+                "kind": "markers",
+                "path": relative,
+                "original": relative,
+                "size": f"{marked.stat().st_size} bytes",
+                "summary": f"{blocks} conflict blocks (<<<<<<< markers)",
             }
         )
 
@@ -964,14 +1007,21 @@ def format_conflict_report(conflicts: list[dict[str, str]]) -> str:
 
     for conflict in conflicts:
         lines.append(f"  {conflict['original']}")
-        lines.append(f"     Rejected changes: {conflict['path']}")
-        lines.append(f"     Details: {conflict['summary']}")
+        if conflict.get("kind") == "markers":
+            lines.append(f"     Inline conflict markers: {conflict['summary']}")
+        else:
+            lines.append(f"     Rejected changes: {conflict['path']}")
+            lines.append(f"     Details: {conflict['summary']}")
         lines.append("")
 
     lines.append("Resolution steps:")
-    lines.append("   1. Open the .rej file to see rejected changes")
-    lines.append("   2. Manually apply changes to the original file")
-    lines.append("   3. Delete the .rej file when resolved")
+    lines.append(
+        "   1. Files with <<<<<<< markers: keep the right side of each block, delete the markers"
+    )
+    lines.append(
+        "   2. .rej files: apply the rejected hunks to the original file, then delete the .rej"
+    )
+    lines.append("   3. Run: aegis update --finish")
     lines.append("")
     lines.append("Tip: Use 'git diff' to see all changes made by the update")
 
