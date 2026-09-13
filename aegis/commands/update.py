@@ -16,6 +16,7 @@ from .. import __version__ as aegis_version
 from ..cli import brand
 from ..config.defaults import GITHUB_TEMPLATE_URL
 from ..constants import AnswerKeys, StorageBackends
+from ..core.behavior_changes import behavior_changes_for
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
     analyze_conflict_files,
@@ -38,6 +39,7 @@ from ..core.migration_generator import generate_missing_migrations
 from ..core.post_gen_tasks import cleanup_components, run_post_generation_tasks
 from ..core.template_cleanup import (
     cleanup_nested_project_directory,
+    removed_env_keys,
     sync_template_changes,
 )
 from ..core.version_compatibility import get_cli_version, get_project_template_version
@@ -722,6 +724,43 @@ def update_command(
         else:
             brand.warn(t("update.partial_success"))
             typer.echo(t("update.partial_detail"))
+        # What the operator needs to know before deploying (#1020, #1029).
+        # Both facts are knowable now and invisible later: a removed .env
+        # key surfaces as a boot crash-loop, a behavior flip as a support
+        # ticket. Neither is derived from a diff - the keys are a set
+        # difference against the updated Settings, the changes are declared
+        # per version by whoever changed the behavior. Report only.
+        stale_keys = removed_env_keys(target_path)
+        changes = behavior_changes_for(
+            from_version=current_version or "",
+            to_version=_template_version_for_ref(target_ref),
+            answers=answers,
+        )
+        if stale_keys or changes:
+            typer.echo("")
+            brand.warn(t("update.notice_header"))
+            for entry in stale_keys:
+                if entry.replacement:
+                    typer.echo(
+                        t(
+                            "update.notice_env_renamed",
+                            name=entry.key,
+                            replacement=entry.replacement,
+                        )
+                    )
+                else:
+                    typer.echo(t("update.notice_env_removed", name=entry.key))
+            for change in changes:
+                typer.echo(
+                    t(
+                        "update.notice_behavior",
+                        since=change.since,
+                        message=change.message,
+                    )
+                )
+                if change.restore:
+                    typer.echo(t("update.notice_restore", restore=change.restore))
+
         typer.echo("")
         typer.echo(t("update.next_steps"))
         typer.echo(t("update.next_review"))
