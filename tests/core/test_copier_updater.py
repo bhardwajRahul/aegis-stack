@@ -191,6 +191,42 @@ class TestAnalyzeConflictFiles:
         assert len(conflicts) == 1
         assert "app/core/config.py" in conflicts[0]["original"]
 
+    def test_finds_inline_conflict_markers(self, tmp_path: Path) -> None:
+        """#1016: the 3-way merge leaves ``<<<<<<<`` markers in place, not
+        .rej files. Those files must land in the same report."""
+        (tmp_path / "app").mkdir()
+        (tmp_path / "app" / "config.py").write_text(
+            "x = 1\n<<<<<<< ours\na = 1\n=======\na = 2\n>>>>>>> theirs\n"
+            "<<<<<<< ours\nb = 1\n=======\nb = 2\n>>>>>>> theirs\n"
+        )
+        (tmp_path / "clean.py").write_text("ok = True\n")
+
+        conflicts = analyze_conflict_files(tmp_path)
+
+        assert [c["original"] for c in conflicts] == ["app/config.py"]
+        assert conflicts[0]["path"] == "app/config.py"
+        assert "2 conflict blocks" in conflicts[0]["summary"]
+
+    def test_marker_scan_skips_git_and_binaries(self, tmp_path: Path) -> None:
+        (tmp_path / ".git").mkdir()
+        (tmp_path / ".git" / "ORIG_HEAD").write_text("<<<<<<< x\n")
+        (tmp_path / ".venv" / "lib").mkdir(parents=True)
+        (tmp_path / ".venv" / "lib" / "m.py").write_text("<<<<<<< x\n")
+        (tmp_path / "img.png").write_bytes(b"\x89PNG\x00<<<<<<< x\n")
+
+        assert analyze_conflict_files(tmp_path) == []
+
+    def test_report_explains_markers_and_rej_separately(self, tmp_path: Path) -> None:
+        (tmp_path / "a.py.rej").write_text("-x\n+y\n")
+        (tmp_path / "b.py").write_text("<<<<<<< ours\n1\n=======\n2\n>>>>>>> theirs\n")
+
+        report = format_conflict_report(analyze_conflict_files(tmp_path))
+
+        assert "a.py.rej" in report
+        assert "b.py" in report
+        assert "<<<<<<<" in report  # tells the user what to look for
+        assert "aegis update --finish" in report
+
     def test_handles_no_conflicts(self, tmp_path: Path) -> None:
         """Test that empty list is returned when no .rej files exist."""
         # Create some regular files

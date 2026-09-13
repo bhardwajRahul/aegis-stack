@@ -581,6 +581,166 @@ class TestUpdateCommandRollback:
         # to /private/var; compare identities, not spellings.
         assert mock_generate.call_args[0][0].resolve() == project_path.resolve()
 
+    @patch("aegis.commands.update.sync_template_changes")
+    @patch("aegis.commands.update.run_post_generation_tasks")
+    @patch("aegis.commands.update.generate_missing_migrations")
+    @patch("copier.run_update")
+    @patch("aegis.commands.update.get_current_template_commit")
+    @patch("aegis.commands.update.create_backup_point")
+    def test_update_prints_what_the_operator_needs_to_know(
+        self,
+        mock_create_backup: MagicMock,
+        mock_get_commit: MagicMock,
+        mock_copier_update: MagicMock,
+        mock_generate: MagicMock,
+        mock_post_gen: MagicMock,
+        mock_sync: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """One post-update block covering both #1020 and #1029.
+
+        sector-7g updated 0.6 -> 0.10.1 and (a) its public dashboard came
+        back auth-gated with nothing saying so or naming AUTH_ENABLED, and
+        (b) its .env still carried DOCS_AUTH_ENABLED, which the new Settings
+        forbids, so the first boot crash-looped with no hint the update was
+        the cause. Both facts are knowable at update time; both must print.
+        """
+        mock_create_backup.return_value = None
+        mock_get_commit.return_value = "different-commit"
+        mock_post_gen.return_value = True
+        mock_sync.return_value = SyncResult()
+        mock_generate.return_value = []
+
+        project_path = project_factory("base_with_auth_service")
+        # A stale key the updated Settings no longer declares.
+        (project_path / ".env").write_text("DOCS_AUTH_ENABLED=true\nAPP_ENV=dev\n")
+        # Pin the recorded template version BELOW the auth gate (0.6.12) so
+        # the update genuinely crosses it.
+        answers_file = project_path / ".copier-answers.yml"
+        answers_file.write_text(
+            answers_file.read_text().replace(
+                "_template_version:", "_template_version_x:"
+            )
+            + "_template_version: 0.6.11\n"
+        )
+        import subprocess
+
+        subprocess.run(
+            ["git", "add", "-A"], cwd=project_path, check=True, capture_output=True
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-qm",
+                "pin",
+            ],
+            cwd=project_path,
+            check=True,
+            capture_output=True,
+        )
+
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--yes"
+        )
+        out = strip_ansi_codes(result.stdout)
+
+        # #1020 - the removed key, and where it went.
+        assert "DOCS_AUTH_ENABLED" in out
+        assert "DOCS_USERNAME" in out
+        # #1029 - the behavior flip, and the flag that restores the old one.
+        assert "AUTH_ENABLED=false" in out
+        # Report only: .env is credentials and must be byte-identical.
+        assert (
+            project_path / ".env"
+        ).read_text() == "DOCS_AUTH_ENABLED=true\nAPP_ENV=dev\n"
+
+    @patch("aegis.commands.update.sync_template_changes")
+    @patch("aegis.commands.update.run_post_generation_tasks")
+    @patch("aegis.commands.update.generate_missing_migrations")
+    @patch("copier.run_update")
+    @patch("aegis.commands.update.get_current_template_commit")
+    @patch("aegis.commands.update.create_backup_point")
+    def test_conflicted_update_reports_markers_and_finishes_later(
+        self,
+        mock_create_backup: MagicMock,
+        mock_get_commit: MagicMock,
+        mock_copier_update: MagicMock,
+        mock_generate: MagicMock,
+        mock_post_gen: MagicMock,
+        mock_sync: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """#1016 + #1018, the whole conflicted-update lifecycle.
+
+        sector-7g: 60 files were left with ``<<<<<<<`` markers that the
+        report never named, and after hand-resolving them nothing advanced
+        ``_template_version`` or ran ``uv sync`` - the next update re-merged
+        the whole range.
+        """
+        mock_create_backup.return_value = None
+        mock_get_commit.return_value = "different-commit"
+        mock_post_gen.return_value = True
+        mock_generate.return_value = []
+        project_path = project_factory("base_with_auth_service")
+        answers_file = project_path / ".copier-answers.yml"
+        version_before = answers_file.read_text()
+
+        def conflicted_sync(target: Path, *a: object, **k: object) -> SyncResult:
+            # The merge writes markers into a file the report must name.
+            (target / "Makefile").write_text(
+                "<<<<<<< ours\nserve:\n=======\nrun:\n>>>>>>> theirs\n"
+            )
+            return SyncResult(conflicts=["Makefile"])
+
+        mock_sync.side_effect = conflicted_sync
+
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--yes"
+        )
+        out = strip_ansi_codes(result.stdout)
+
+        # #1016 - the marker file is in the printed report, with the fix step.
+        assert "Makefile" in out
+        assert "aegis update --finish" in out
+        # Unfinished: post-gen skipped, baseline not advanced, state recorded.
+        assert not mock_post_gen.called
+        assert answers_file.read_text() == version_before
+        pending = project_path / ".git" / "aegis-update-pending.json"
+        assert pending.exists()
+
+        # #1018 - finishing with markers still present refuses and names them.
+        result = run_aegis_command(
+            "update", "--finish", "--project-path", str(project_path)
+        )
+        assert result.returncode == 1
+        assert "Makefile" in strip_ansi_codes(result.stdout)
+        assert not mock_post_gen.called
+
+        # Resolve, then finish: post-gen runs, baseline advances, state cleared.
+        (project_path / "Makefile").write_text("serve:\n")
+        result = run_aegis_command(
+            "update", "--finish", "--project-path", str(project_path)
+        )
+        assert result.returncode == 0, strip_ansi_codes(result.stdout)
+        assert mock_post_gen.called
+        assert answers_file.read_text() != version_before
+        assert not pending.exists()
+
+    def test_finish_without_pending_update_is_an_error(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        project_path = project_factory("base_with_auth_service")
+        result = run_aegis_command(
+            "update", "--finish", "--project-path", str(project_path)
+        )
+        assert result.returncode == 1
+        assert "nothing to finish" in strip_ansi_codes(result.stdout).lower()
+
     @patch("aegis.commands.update.rollback_to_backup")
     @patch("aegis.commands.update.create_backup_point")
     @patch("copier.run_update")

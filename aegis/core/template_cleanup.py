@@ -5,6 +5,7 @@ This module handles cleanup tasks after Copier updates, particularly
 dealing with nested directory structures created during template updates.
 """
 
+import ast
 import shutil
 import subprocess
 import sys
@@ -932,6 +933,87 @@ def _is_meaningful_render(relative: Path, content: bytes) -> bool:
     if relative.name == "__init__.py":
         return True
     return bool(content.strip())
+
+
+# ``.env`` keys the framework removed or renamed, and what replaced them.
+# Maintained alongside ``Settings`` changes: a removed field with an entry
+# here prints its successor; one without prints only that it is gone.
+# Keep this small - it documents renames, it is not a schema.
+_ENV_KEY_REPLACEMENTS: dict[str, str] = {
+    # 0.10: docs auth is on when both are set; the flag was redundant.
+    "DOCS_AUTH_ENABLED": "set DOCS_USERNAME and DOCS_PASSWORD instead",
+}
+
+
+@dataclass(frozen=True)
+class RemovedEnvKey:
+    """A ``.env`` key the updated ``Settings`` no longer declares."""
+
+    key: str
+    replacement: str | None  # None when the framework recorded no successor
+
+
+def _active_env_keys(env_path: Path) -> set[str]:
+    """Keys ``.env`` actually SETS. Commented lines are not set: pydantic
+    never sees them, so they cannot cause ``extra_forbidden`` and must not
+    be reported. (``ManualUpdater._extract_env_vars`` deliberately keeps
+    commented keys because it reasons about ``.env.example`` documentation;
+    that is the opposite of what a boot-crash check needs.)"""
+    keys: set[str] = set()
+    for raw in env_path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :]
+        keys.add(line.split("=", 1)[0].strip())
+    return keys
+
+
+def _settings_field_names(config_path: Path) -> set[str] | None:
+    """Field names of the ``Settings`` class in ``config_path``, by AST.
+
+    No import: the project's venv may not exist yet and importing app code
+    from the CLI would be wrong anyway. A field is an annotated assignment
+    directly in the class body (``NAME: type = default``); methods,
+    properties and ``model_config`` are not fields. ``None`` when there is
+    no ``Settings`` class to compare against.
+    """
+    try:
+        tree = ast.parse(config_path.read_text())
+    except (OSError, SyntaxError):
+        return None
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == "Settings":
+            return {
+                stmt.target.id
+                for stmt in node.body
+                if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)
+            } - {"model_config"}
+    return None
+
+
+def removed_env_keys(project_path: Path) -> list[RemovedEnvKey]:
+    """``.env`` keys the post-update ``Settings`` no longer declares (#1020).
+
+    ``Settings`` uses ``extra="forbid"``, so every such key crashes the app
+    at boot with a pydantic ``extra_forbidden`` error - after the update has
+    already reported success. This is a set difference against the
+    project's own updated ``app/core/config.py``, not a template diff.
+
+    Report only. ``.env`` holds real credentials and is never edited.
+    """
+    env_path = project_path / ".env"
+    config_path = project_path / "app" / "core" / "config.py"
+    if not env_path.is_file() or not config_path.is_file():
+        return []
+    declared = _settings_field_names(config_path)
+    if declared is None:
+        return []
+    return [
+        RemovedEnvKey(key=key, replacement=_ENV_KEY_REPLACEMENTS.get(key))
+        for key in sorted(_active_env_keys(env_path) - declared)
+    ]
 
 
 def _should_skip_sync(relative_path: str) -> bool:

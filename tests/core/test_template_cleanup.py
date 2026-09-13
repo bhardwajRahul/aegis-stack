@@ -1612,3 +1612,96 @@ class TestDocumentsOnlyStackKeepsWhatItNeeds:
 
         assert card.exists()
         assert alembic.exists()
+
+
+class TestRemovedEnvKeysReport:
+    """#1020. ``Settings`` uses ``extra="forbid"``, so a ``.env`` key the
+    updated ``Settings`` no longer declares crashes the app at boot with a
+    pydantic ``extra_forbidden`` error - and nothing in the update output
+    said the update caused it.
+
+    This is a set difference, not a diff: the keys ``.env`` sets, minus the
+    fields the post-sync ``config.py`` declares. Field names are read by
+    AST so no import (and no project venv) is needed. Report only: ``.env``
+    holds real credentials and is never edited.
+    """
+
+    CONFIG = '''
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    """Docs."""
+    PROJECT_NAME: str = "x"
+    DOCS_USERNAME: str | None = None
+    DOCS_PASSWORD: str | None = None
+    DATABASE_URL_LOCAL: str | None = None
+    model_config = {"extra": "forbid"}
+
+    @property
+    def derived(self) -> str:
+        return "not a field"
+'''
+
+    def test_flags_keys_settings_no_longer_declares(self, tmp_path: Path) -> None:
+        from aegis.core.template_cleanup import removed_env_keys
+
+        (tmp_path / "app" / "core").mkdir(parents=True)
+        (tmp_path / "app" / "core" / "config.py").write_text(self.CONFIG)
+        (tmp_path / ".env").write_text(
+            "PROJECT_NAME=demo\n"
+            "DOCS_AUTH_ENABLED=true\n"  # removed in 0.10: derives from USER+PASS
+            "DATABASE_URL_LOCAL=sqlite:///x\n"  # still declared - must NOT flag
+            "# COMMENTED_OUT=1\n"  # commented: not set, must NOT flag
+            "\n"
+        )
+
+        report = removed_env_keys(tmp_path)
+
+        assert [r.key for r in report] == ["DOCS_AUTH_ENABLED"]
+
+    def test_known_rename_names_its_replacement(self, tmp_path: Path) -> None:
+        """A key the framework renamed gets its successor, so the operator
+        knows what to write instead of only what to delete."""
+        from aegis.core.template_cleanup import removed_env_keys
+
+        (tmp_path / "app" / "core").mkdir(parents=True)
+        (tmp_path / "app" / "core" / "config.py").write_text(self.CONFIG)
+        (tmp_path / ".env").write_text("DOCS_AUTH_ENABLED=true\n")
+
+        (entry,) = removed_env_keys(tmp_path)
+
+        assert entry.key == "DOCS_AUTH_ENABLED"
+        assert entry.replacement is not None
+        assert "DOCS_USERNAME" in entry.replacement
+
+    def test_unknown_removed_key_is_still_reported(self, tmp_path: Path) -> None:
+        from aegis.core.template_cleanup import removed_env_keys
+
+        (tmp_path / "app" / "core").mkdir(parents=True)
+        (tmp_path / "app" / "core" / "config.py").write_text(self.CONFIG)
+        (tmp_path / ".env").write_text("SOME_OLD_THING=1\n")
+
+        (entry,) = removed_env_keys(tmp_path)
+
+        assert entry.key == "SOME_OLD_THING"
+        assert entry.replacement is None
+
+    def test_no_env_or_no_config_is_a_quiet_noop(self, tmp_path: Path) -> None:
+        from aegis.core.template_cleanup import removed_env_keys
+
+        assert removed_env_keys(tmp_path) == []
+        (tmp_path / ".env").write_text("A=1\n")
+        assert removed_env_keys(tmp_path) == []  # no config.py to compare against
+
+    def test_never_edits_env(self, tmp_path: Path) -> None:
+        from aegis.core.template_cleanup import removed_env_keys
+
+        (tmp_path / "app" / "core").mkdir(parents=True)
+        (tmp_path / "app" / "core" / "config.py").write_text(self.CONFIG)
+        env = tmp_path / ".env"
+        env.write_text("DOCS_AUTH_ENABLED=true\nSECRET=hunter2\n")
+        before = env.read_text()
+
+        removed_env_keys(tmp_path)
+
+        assert env.read_text() == before
