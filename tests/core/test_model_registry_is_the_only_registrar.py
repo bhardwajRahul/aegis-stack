@@ -47,7 +47,8 @@ def test_every_table_lives_where_the_registry_looks() -> None:
     off_path = sorted(
         p.relative_to(PROJECT).as_posix()
         for p in (PROJECT / "app").rglob("*.py*")
-        if p.suffix in (".py", ".jinja") and TABLE_RE.search(p.read_text())
+        if p.suffix in (".py", ".jinja")
+        and TABLE_RE.search(p.read_text())
         and not re.match(
             r"app/(models/|services/[a-z_]+/models(/|\.py))",
             p.relative_to(PROJECT).as_posix(),

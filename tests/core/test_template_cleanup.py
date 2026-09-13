@@ -1705,3 +1705,39 @@ class Settings(BaseSettings):
         removed_env_keys(tmp_path)
 
         assert env.read_text() == before
+
+
+class TestStaleEnvDefaultsReport:
+    """#1027: every project shipped AEGIS_STACK_TAG=aegis-stack:latest, so two
+    projects on one machine share one image and `docker compose up` in one
+    silently runs the other's build. The template default is now the slug;
+    an updated project still carrying the old shared value is told. Report
+    only - .env is never edited."""
+
+    def test_flags_shared_image_tag(self, tmp_path: Path) -> None:
+        from aegis.core.template_cleanup import stale_env_defaults
+
+        (tmp_path / ".env").write_text(
+            "AEGIS_STACK_TAG=aegis-stack:latest\nAPP_ENV=dev\n"
+        )
+        hits = stale_env_defaults(tmp_path, {"project_slug": "sector-7g"})
+        assert len(hits) == 1
+        assert hits[0].key == "AEGIS_STACK_TAG"
+        assert (
+            hits[0].replacement is not None
+            and "sector-7g:latest" in hits[0].replacement
+        )
+        assert (
+            tmp_path / ".env"
+        ).read_text() == "AEGIS_STACK_TAG=aegis-stack:latest\nAPP_ENV=dev\n"
+
+    def test_project_scoped_tag_is_quiet(self, tmp_path: Path) -> None:
+        from aegis.core.template_cleanup import stale_env_defaults
+
+        (tmp_path / ".env").write_text("AEGIS_STACK_TAG=sector-7g:latest\n")
+        assert stale_env_defaults(tmp_path, {"project_slug": "sector-7g"}) == []
+
+    def test_no_env_is_quiet(self, tmp_path: Path) -> None:
+        from aegis.core.template_cleanup import stale_env_defaults
+
+        assert stale_env_defaults(tmp_path, {"project_slug": "x"}) == []

@@ -88,6 +88,22 @@ class TestInstallDependencies:
             assert args[1]["cwd"] == tmp_path
             assert "VIRTUAL_ENV" not in args[1]["env"]
 
+    def test_relock_re_resolves_the_lockfile(self, tmp_path: Path) -> None:
+        """#1019: a plain ``uv sync`` honours a stale ``uv.lock``, so an
+        updated project kept year-old pins and ~80 phantom type errors.
+        ``relock`` re-resolves against the updated pyproject."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0, stderr="")
+
+            install_dependencies(tmp_path, relock=True)
+
+            assert mock_run.call_args[0][0] == [
+                "uv",
+                "sync",
+                "--all-extras",
+                "--upgrade",
+            ]
+
     def test_installation_failure(self, tmp_path: Path) -> None:
         """Test failed dependency installation."""
         with patch("subprocess.run") as mock_run:
@@ -405,7 +421,9 @@ class TestRunPostGenerationTasks:
         """Test that tasks run in the correct order."""
         call_order = []
 
-        def track_deps(path: Path, python_version: str | None = None) -> bool:
+        def track_deps(
+            path: Path, python_version: str | None = None, *, relock: bool = False
+        ) -> bool:
             call_order.append("deps")
             return True
 
@@ -496,7 +514,10 @@ class TestRevisionsDerivedInsideTheProjectVenv:
             patch("aegis.core.post_gen_tasks.format_code", return_value=True),
         ):
             run_post_generation_tasks(
-                tmp_path, include_migrations=True, migration_services=["auth"], report=report
+                tmp_path,
+                include_migrations=True,
+                migration_services=["auth"],
+                report=report,
             )
         assert report["revisions_ok"] is False
         # the upgrade is skipped: a DB must not be stamped past revisions

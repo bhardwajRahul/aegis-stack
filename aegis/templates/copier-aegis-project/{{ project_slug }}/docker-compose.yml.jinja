@@ -1,6 +1,6 @@
 
 x-app: &app
-  image: ${AEGIS_STACK_TAG:-aegis-stack:latest}
+  image: ${AEGIS_STACK_TAG:-{{ project_slug }}:latest}
   build:
     context: .
     args:

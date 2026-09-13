@@ -98,3 +98,73 @@ def test_bootstrap_pins_alembic_once(tmp_path: Path) -> None:
     _pin_alembic(tmp_path)
     _pin_alembic(tmp_path)
     assert pyproject.read_text().count(ALEMBIC_PIN) == 1
+
+
+class TestDataStatements:
+    """``ServiceMigrationSpec.data_sql`` (#1110): the one thing the models
+    can never derive. ``generate_revisions`` appends it to the revision it
+    wrote for the service - or, when the models produced nothing for that
+    service (``finance_auth_link``: its FKs are inline in ``finance`` now),
+    writes a data-only revision so the statement still has a home."""
+
+    SENTINEL = "standalone@finance.local"
+
+    def test_appended_to_the_revision_the_service_wrote(self, tmp_path: Path) -> None:
+        versions = _versions(tmp_path)
+
+        def fake_run(cmd: list[str], **_kw: object) -> Mock:
+            (versions / "001_finance_auth_link.py").write_text(
+                "from alembic import op\n\n\ndef upgrade() -> None:\n    pass\n\n\n"
+                "def downgrade() -> None:\n    pass\n"
+            )
+            return Mock(returncode=0, stderr="", stdout="")
+
+        with patch(
+            "aegis.core.migration_generator.subprocess.run", side_effect=fake_run
+        ):
+            written = generate_revisions(tmp_path, ["finance_auth_link"])
+
+        assert written == [versions / "001_finance_auth_link.py"]
+        src = written[0].read_text()
+        assert self.SENTINEL in src
+        assert src.index(self.SENTINEL) < src.index("def downgrade")
+
+    def test_data_only_revision_when_the_models_wrote_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        versions = _versions(tmp_path)
+        (versions / "001_auth.py").write_text("")
+        (versions / "002_finance.py").write_text("")
+
+        with patch(
+            "aegis.core.migration_generator.subprocess.run",
+            return_value=Mock(returncode=0, stderr="", stdout=""),
+        ):
+            written = generate_revisions(tmp_path, ["finance_auth_link"])
+
+        assert written == [versions / "003_finance_auth_link.py"]
+        src = written[0].read_text()
+        assert "revision = '003'" in src
+        assert "down_revision = '002'" in src
+        assert self.SENTINEL in src
+        assert "def downgrade" in src
+
+    def test_data_only_revision_is_written_once(self, tmp_path: Path) -> None:
+        versions = _versions(tmp_path)
+        (versions / "001_finance_auth_link.py").write_text("")
+
+        with patch(
+            "aegis.core.migration_generator.subprocess.run",
+            return_value=Mock(returncode=0, stderr="", stdout=""),
+        ):
+            assert generate_revisions(tmp_path, ["finance_auth_link"]) == []
+
+    def test_services_without_data_are_untouched(self, tmp_path: Path) -> None:
+        versions = _versions(tmp_path)
+
+        with patch(
+            "aegis.core.migration_generator.subprocess.run",
+            return_value=Mock(returncode=0, stderr="", stdout=""),
+        ):
+            assert generate_revisions(tmp_path, ["blog"]) == []
+        assert list(versions.glob("*.py")) == []

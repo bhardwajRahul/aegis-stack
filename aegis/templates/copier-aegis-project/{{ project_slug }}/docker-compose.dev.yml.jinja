@@ -119,7 +119,7 @@ services:
       - dev
 
   build-static-watcher:
-    image: ${AEGIS_STACK_TAG:-aegis-stack:latest}
+    image: ${AEGIS_STACK_TAG:-{{ project_slug }}:latest}
     env_file:
       - ${AEGIS_STACK_ENV_FILE:-.env}
     working_dir: /code

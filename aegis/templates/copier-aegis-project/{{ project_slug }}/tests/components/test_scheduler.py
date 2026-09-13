@@ -8,9 +8,10 @@ For integration tests of the actual scheduler, see the CLI tests that generate
 complete projects and validate they work correctly.
 """
 
-import pytest
-from app.services.system.health import check_system_status
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import pytest
+
+from app.services.system.health import check_system_status
 
 
 @pytest.mark.asyncio
@@ -61,3 +62,69 @@ async def test_scheduler_heartbeat_job_registered() -> None:
     HEARTBEAT_FILE.unlink(missing_ok=True)
     await touch_scheduler_heartbeat()
     assert HEARTBEAT_FILE.exists()
+
+
+def test_orphan_sweep_exports_before_deleting(tmp_path, monkeypatch) -> None:
+    """#1026: the sweep enforces code-as-truth by deleting persisted jobs
+    not registered in code. On the first boot after an update that is
+    every schedule ever added at runtime (sector-7g lost 26 in one INFO
+    line). Deletion must leave a file the operator can restore from."""
+    # A memory-backed scheduler ships neither the sweep nor SQLAlchemy;
+    # skip before importing either.
+    orphans = pytest.importorskip("app.services.scheduler.orphans")
+    pytest.importorskip("sqlalchemy")
+    from contextlib import contextmanager
+    import json
+    import pickle
+
+    from sqlalchemy import create_engine, text
+    from sqlmodel import Session
+
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE apscheduler_jobs (id VARCHAR PRIMARY KEY, "
+                "next_run_time FLOAT, job_state BLOB)"
+            )
+        )
+        state = pickle.dumps(
+            {
+                "func": "app.jobs:morning_donut_run",
+                "trigger": "cron[hour=7]",
+                "kwargs": {"n": 1},
+            }
+        )
+        conn.execute(
+            text("INSERT INTO apscheduler_jobs VALUES ('morning_donut_run', 1.0, :s)"),
+            {"s": state},
+        )
+        conn.execute(
+            text("INSERT INTO apscheduler_jobs VALUES ('in_code', 2.0, :s)"),
+            {"s": state},
+        )
+
+    @contextmanager
+    def fake_session(autocommit: bool = True):
+        with Session(engine) as session:
+            yield session
+            session.commit()
+
+    monkeypatch.setattr(orphans, "db_session", fake_session)
+    monkeypatch.setattr(orphans.settings, "DATABASE_BACKUP_DIR", str(tmp_path))
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(check_system_status, trigger="interval", minutes=5, id="in_code")
+
+    orphans.drop_unknown_persisted_jobs(scheduler)
+
+    with engine.begin() as conn:
+        left = {r[0] for r in conn.execute(text("SELECT id FROM apscheduler_jobs"))}
+    assert left == {"in_code"}
+
+    exports = list(tmp_path.glob("orphan_jobs_*.json"))
+    assert len(exports) == 1, exports
+    rows = json.loads(exports[0].read_text())
+    assert rows[0]["id"] == "morning_donut_run"
+    assert "morning_donut_run" in rows[0]["func"]
+    assert rows[0]["kwargs"] == {"n": 1}

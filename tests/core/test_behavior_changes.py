@@ -92,3 +92,20 @@ class TestRegistryHygiene:
         gate = _auth_gate()
         assert gate.since == "0.6.12"
         assert gate.restore is not None and "AUTH_ENABLED=false" in gate.restore
+
+
+def test_scheduler_sweep_entry_needs_persistence() -> None:
+    """The sweep only exists with a persistent jobstore; a memory-backed
+    scheduler has nothing to lose and must not be warned."""
+    base = {"include_scheduler": True, "scheduler_backend": "postgres"}
+    assert behavior_changes_for(
+        from_version="0.6.13", to_version="0.10.1", answers=base
+    )
+    memory = {**base, "scheduler_backend": "memory"}
+    assert not [
+        c
+        for c in behavior_changes_for(
+            from_version="0.6.13", to_version="0.10.1", answers=memory
+        )
+        if c.since == "0.7.0"
+    ]

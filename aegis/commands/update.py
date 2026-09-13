@@ -42,6 +42,7 @@ from ..core.post_gen_tasks import cleanup_components, run_post_generation_tasks
 from ..core.template_cleanup import (
     cleanup_nested_project_directory,
     removed_env_keys,
+    stale_env_defaults,
     sync_template_changes,
 )
 from ..core.version_compatibility import get_cli_version, get_project_template_version
@@ -237,6 +238,7 @@ def _run_postgen(target_path: Path, answers: dict[str, Any]) -> bool:
         target_path,
         include_migrations=include_migrations,
         report=postgen_report,
+        relock=True,
     )
     # A failed upgrade is non-fatal to generation but must not be
     # reported as a clean update: the deployed app is what crashes
@@ -838,7 +840,9 @@ def update_command(
         # ticket. Neither is derived from a diff - the keys are a set
         # difference against the updated Settings, the changes are declared
         # per version by whoever changed the behavior. Report only.
-        stale_keys = removed_env_keys(target_path)
+        stale_keys = removed_env_keys(target_path) + stale_env_defaults(
+            target_path, answers
+        )
         changes = behavior_changes_for(
             from_version=current_version or "",
             to_version=_template_version_for_ref(target_ref),

@@ -674,7 +674,9 @@ def copy_service_files(
         )
 
 
-def install_dependencies(project_path: Path, python_version: str | None = None) -> bool:
+def install_dependencies(
+    project_path: Path, python_version: str | None = None, *, relock: bool = False
+) -> bool:
     """
     Install project dependencies using uv.
 
@@ -707,6 +709,13 @@ def install_dependencies(project_path: Path, python_version: str | None = None) 
         # pytest) are present — the post-gen ``make fix`` formatting step needs
         # ruff, and without it generated projects shipped unformatted.
         cmd = ["uv", "sync", "--all-extras"]
+        # A plain sync honours whatever uv.lock already pins. After a
+        # template update that is a stale resolve of the OLD pyproject
+        # (#1019: year-old httpx/pydantic, ~80 phantom type errors in
+        # byte-identical files). ``--upgrade`` re-resolves; on a fresh
+        # project there is no lock yet, so it changes nothing there.
+        if relock:
+            cmd.append("--upgrade")
         if python_version:
             cmd.extend(["--python", python_version])
 
@@ -1064,6 +1073,7 @@ def run_post_generation_tasks(
     reporter: "BuildReporter | None" = None,
     report: dict[str, bool] | None = None,
     migration_services: list[str] | None = None,
+    relock: bool = False,
 ) -> bool:
     """
     Run all post-generation tasks for a project.
@@ -1099,7 +1109,7 @@ def run_post_generation_tasks(
     # Task 1: Install dependencies (CRITICAL - fails entire generation if this fails)
     if reporter is not None:
         reporter.step("deps", t("build.step.deps"), "uv sync")
-    deps_success = install_dependencies(project_path, python_version)
+    deps_success = install_dependencies(project_path, python_version, relock=relock)
 
     if not deps_success:
         typer.echo()

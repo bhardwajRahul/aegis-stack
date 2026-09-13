@@ -25,6 +25,25 @@ import_all_models()
 
 {% set needs_migrations = include_auth or include_blog or include_documents or include_insights or include_payment or include_finance or (include_ai and ai_backend != "memory") or (include_scheduler and scheduler_backend != "memory") %}
 {% if database_engine == "postgres" and needs_migrations %}
+def _row_exists(conn: Any, table: str, where: str) -> bool:
+    """Whether ``SELECT 1 FROM table WHERE where`` finds a row.
+
+    The ``("row", table, where)`` signature form: proof for a data-only
+    revision (``finance_auth_link`` inserts user 0). A table, column or FK
+    cannot prove such a revision ran - the FK it used to add is inline in
+    the ``finance`` revision now - and stamping it on a persisted volume
+    would skip the only INSERT that satisfies that FK (aegis-stack#1110).
+    """
+    from sqlmodel import text
+
+    schema, _, bare = table.rpartition(".")
+    qualified = f'"{schema}"."{bare}"' if schema else f'"{bare}"'
+    try:
+        return conn.execute(text(f"SELECT 1 FROM {qualified} WHERE {where} LIMIT 1")).first() is not None
+    except Exception:
+        return False
+
+
 def _check_and_stamp_existing_tables() -> None:
     """
     Detect when tables for a pending migration already exist.
@@ -129,6 +148,9 @@ def _check_and_stamp_existing_tables() -> None:
                 already_applied = any(
                     col_name in fk.get("constrained_columns", ()) for fk in fks
                 )
+            elif sig[0] == "row":
+                with db_session(autocommit=False) as session:
+                    already_applied = _row_exists(session.connection(), sig[1], sig[2])
 
             if already_applied:
                 logger.warning(
