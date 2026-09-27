@@ -1013,6 +1013,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../components/backend/serving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ASGI Server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../components/backend/auth/" class="md-nav__link">
         
   
@@ -6120,8 +6148,12 @@ which is the whole reason this is a link table.</p>
 <td>Service functions (list, search, switch)</td>
 </tr>
 <tr>
-<td><code>app/services/ai/etl/llm_sync_service.py</code></td>
+<td><code>app/services/ai/domains/llm/etl/llm_sync_service.py</code></td>
 <td>Catalog sync from APIs</td>
+</tr>
+<tr>
+<td><code>app/services/ai/domains/llm/etl/upserts.py</code></td>
+<td>Row writes for the sync</td>
 </tr>
 <tr>
 <td><code>app/services/ai/etl/clients/openrouter_client.py</code></td>
